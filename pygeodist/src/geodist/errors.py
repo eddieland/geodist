@@ -27,11 +27,16 @@ class KernelUnavailableError(GeodistError):
     """Raised when the compiled Rust kernels are missing at runtime."""
 
 
+class KernelExecutionError(GeodistError):
+    """Raised when a Rust kernel fails unexpectedly during execution."""
+
+
 __all__ = (
     "CRSValidationError",
     "GeodistError",
     "GeometryTypeError",
     "InvalidGeometryError",
     "KernelUnavailableError",
+    "KernelExecutionError",
     "VectorizationError",
 )

@@ -2,19 +2,6 @@
 
 from __future__ import annotations
 
-from .errors import (
-    CRSValidationError,
-    GeodistError,
-    GeometryTypeError,
-    InvalidGeometryError,
-    KernelUnavailableError,
-    VectorizationError,
-)
-from .geometry import Geometry, GeometryCollection, LineString, Point, Polygon
-from .io import dumps_geojson, dumps_wkb, dumps_wkt, loads_geojson, loads_wkb, loads_wkt
-from .ops import buffer, centroid, distance, equals, intersects, within
-from .vectorized import distance_many, equals_many, intersects_many, within_many
-
 
 class _PlaceholderGeometryHandle:
     """Minimal stand-in for the Rust geometry handle when kernels are absent."""
@@ -28,12 +15,32 @@ class _PlaceholderGeometryHandle:
 
 try:
     from . import _geodist_rs
-except ImportError as exc:  # pragma: no cover - exercised by importers
-    raise ImportError("geodist._geodist_rs is missing; build the extension with `uv run maturin develop`.") from exc
-else:
-    EARTH_RADIUS_METERS = _geodist_rs.EARTH_RADIUS_METERS
-    if not hasattr(_geodist_rs, "GeometryHandle"):
-        setattr(_geodist_rs, "GeometryHandle", _PlaceholderGeometryHandle)
+    HAVE_KERNELS = True
+except ImportError:  # pragma: no cover - exercised by importers
+    HAVE_KERNELS = False
+
+    class _KernelStub:
+        EARTH_RADIUS_METERS = 6_371_008.8
+        GeometryHandle = _PlaceholderGeometryHandle
+
+    _geodist_rs = _KernelStub()
+
+EARTH_RADIUS_METERS = _geodist_rs.EARTH_RADIUS_METERS
+if not hasattr(_geodist_rs, "GeometryHandle"):
+    setattr(_geodist_rs, "GeometryHandle", _PlaceholderGeometryHandle)
+
+from .errors import (
+    CRSValidationError,
+    GeodistError,
+    GeometryTypeError,
+    InvalidGeometryError,
+    KernelUnavailableError,
+    VectorizationError,
+)
+from .geometry import Geometry, GeometryCollection, LineString, Point, Polygon
+from .io import dumps_geojson, dumps_wkb, dumps_wkt, loads_geojson, loads_wkb, loads_wkt
+from .ops import buffer, centroid, distance, equals, intersects, within
+from .vectorized import distance_many, equals_many, intersects_many, within_many
 
 __all__ = (
     "CRSValidationError",
