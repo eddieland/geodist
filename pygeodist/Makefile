@@ -1,10 +1,6 @@
-# Makefile for easy development workflows.
-# See development.md for docs.
-# Note GitHub Actions call uv directly, not this Makefile.
+.DEFAULT_GOAL := help
 
-.DEFAULT_GOAL := default
-
-.PHONY: default install lint test upgrade build clean agent-rules
+SOURCE_DIRS := src tests devtools
 
 ### Makefile
 
@@ -18,35 +14,41 @@ help: ## Display this help
 
 ### Installation
 
+.PHONY: install
 install: ## Install the project's dependencies with uv (**including all extras and dev dependencies**)
 	uv sync --all-extras --dev
 
 ### Development
 
+.PHONY: lint
 lint: ## Run linters and formatting check
-	uv run ruff format --check src tests typings
-	uv run ruff check src tests typings
-	uv run mypy src tests
-	uv run codespell src tests README.md CONTRIBUTING.md
+	uv run ruff format --check $(SOURCE_DIRS)
+	uv run ruff check $(SOURCE_DIRS)
+	uv run mypy $(SOURCE_DIRS)
+	uv run codespell $(SOURCE_DIRS) *.md
 
+.PHONY: test
 test: ## Run tests
 	uv run pytest
 
+.PHONY: fmt
 fmt: ## Format code
-	uv run ruff check --fix --exit-zero src tests typings >/dev/null
-	uv run ruff format src tests typings
+	uv run ruff check --fix --exit-zero $(SOURCE_DIRS) >/dev/null
+	uv run ruff format $(SOURCE_DIRS)
 
+.PHONY: upgrade
 upgrade: ## Upgrade dependencies
 	uv sync --upgrade --all-extras --dev
 
+.PHONY: build
 build: ## Build the project
 	uv build
 
+.PHONY: clean
 clean: ## Clean up build artifacts and caches
 	-rm -rf dist/
 	-rm -rf *.egg-info/
 	-rm -rf .pytest_cache/
 	-rm -rf .mypy_cache/
 	-rm -rf .venv/
-	-rm -rf CLAUDE.md AGENTS.md
 	-find . -type d -name "__pycache__" -exec rm -rf {} +

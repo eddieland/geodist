@@ -85,15 +85,14 @@ extensions:
 
 - [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
 
-- [Based Pyright](https://marketplace.visualstudio.com/items?itemName=detachhead.basedpyright)
-  for type checking. Note that this extension works with non-Microsoft VSCode forks like
-  Cursor.
+- [Mypy Type Checker](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
+  for strict type checking. It works with non-Microsoft VSCode forks like Cursor.
 
 ## Documentation
 
 - [uv docs](https://docs.astral.sh/uv/)
 
-- [basedpyright docs](https://docs.basedpyright.com/latest/)
+- [mypy docs](https://mypy.readthedocs.io/en/stable/)
 
 * * *
 
