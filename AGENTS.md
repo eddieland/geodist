@@ -21,6 +21,10 @@
 - Rust: Standard Rustfmt defaults; favor small modules and explicit imports. Use snake_case for fns/vars, CamelCase for types/traits.
 - Docs and examples: concise, imperative. Keep public APIs documented once they stabilize.
 
+## Specs
+
+- Author new specs under `docs/specs` by copying `docs/specs/_TEMPLATE.md` and keeping its section headings/backlog table structure intact.
+
 ## Testing Guidelines
 
 - Python: Pytest; place new tests under `pygeodist/tests` and mirror package layout (e.g., `tests/test_geom.py` for `src/geodist/geom.py`). Name tests `test_*` and use descriptive asserts. Add regression tests for bug fixes.

@@ -2,53 +2,56 @@
 
 ## Purpose
 
-- Introduce PyO3 as the Rust↔Python bridge.
-- Produce a small, buildable binding (e.g., exposing a Rust constant) to verify wheel generation in CI and locally.
-- Leave room for a follow-up spec to design full API surface and packaging layout.
+- Introduce PyO3 as the Rust↔Python bridge for an initial binding.
+- Ship a buildable constant export to validate wheel generation in CI and locally.
+- Keep API design flexible for a follow-up spec once kernels settle.
 
-## Scope (this pass)
+## Guiding Constraints
 
-- Keep existing Rust crate (`geodist-rs`) as the single source of truth for kernels and types.
-- Add an optional `python` feature that hosts PyO3 bindings and a trivial export.
-- Switch Python packaging to maturin so we can publish a wheel that vendors the Rust extension.
-- Ensure Python imports work via the `geodist` package namespace.
+- Keep `geodist-rs` as the single source of truth; gate PyO3 behind an optional `python` feature.
+- Publish the Rust extension under the `geodist` namespace (e.g., `geodist._geodist_rs`) without polluting top-level APIs.
+- Use maturin for Python packaging while staying compatible with the existing `uv` workflow and pinned toolchains.
 
-## Approach
+## Target Capabilities
 
-1) **Rust bindings shell**
-   - Add PyO3 dependency gated behind a `python` feature.
-   - Provide a minimal `#[pymodule]` that exports `EARTH_RADIUS_METERS` (or a stub struct) for smoke testing.
-2) **Build system wiring**
-   - Use maturin as the PEP 517 backend in `pyproject.toml` with `manifest-path` pointing at `../geodist-rs/Cargo.toml`.
-   - Configure module name under `geodist` (e.g., `geodist._geodist_rs`) and enable the `python` feature.
-   - Add Make targets/notes for `maturin develop` / `uv build`.
-3) **Python surface**
-   - Re-export the bound constant from `geodist/__init__.py` so downstream code can `import geodist`.
-   - Add a smoke test that asserts the constant matches the Rust value.
-4) **Validation**
-   - `uv sync --all-extras --dev`
-   - `cd pygeodist && uv run maturin develop --features python --manifest-path ../geodist-rs/Cargo.toml`
-   - `cd pygeodist && uv run pytest`
+1. Feature-gated PyO3 module exporting a minimal surface (constant or stub) that builds with and without the `python` feature.
+2. Maturin-backed Python build wiring that produces a wheel from `geodist-rs` via `pygeodist/pyproject.toml`.
+3. Python package re-export that allows `import geodist` to surface the bound constant with a smoke test validating parity.
 
-## Status
+## Subagent Execution Plan
 
-- ✅ (Step 1) Rust bindings shell: Added optional `python` feature, PyO3 dependency, and `_geodist_rs` module exporting `EARTH_RADIUS_METERS`; `cargo check` passes with and without the feature.
-- ⬜ (Step 2) Build system wiring: configure maturin/pyproject and build targets.
-- ⬜ (Step 3) Python surface: re-export constant and add smoke test.
-- ⬜ (Step 4) Validation: run maturin develop and pytest once wiring is in place.
+The following backlog is prioritized for a single subagent (or small group) to implement iteratively. Update the _Status_ and _Lessons Learned_ sections while working.
 
-## Lessons Learned
+### Task Backlog
+
+| Priority | Task | Definition of Done | Notes | Status |
+| -------- | ---- | ------------------ | ----- | ------ |
+| P0 | Rust bindings shell | Optional `python` feature adds PyO3 and exports `EARTH_RADIUS_METERS` via `geodist._geodist_rs`; `cargo check` passes with and without the feature | Already merged; keep module naming stable for downstream imports | Done |
+| P0 | Build system wiring | `pygeodist/pyproject.toml` uses maturin with `manifest-path` pointing at `../geodist-rs/Cargo.toml` and enables the `python` feature; Make/uv targets documented | Align with `2025-11-19_rust-mvp-algorithm.md` references | Planned |
+| P1 | Python surface | `geodist/__init__.py` re-exports the bound constant; smoke test asserts import works and value matches Rust | Keep Python namespace minimal and stable | Planned |
+| P1 | Validation | `uv sync --all-extras --dev`, `maturin develop` with the `python` feature, and pytest run documented (and added to CI if feasible) | Ensure instructions work on fresh environments | Planned |
+| P2 | Future API expansion | Follow-up spec to design kernel function exports, error mapping, and data model | Defer until kernels stabilize | Deferred |
+
+_Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
+
+### Risks & Mitigations
+
+- **Risk:** Module naming drifts from `geodist._geodist_rs`. **Mitigation:** Keep the module path stable and update dependent docs/tests immediately if a rename is required.
+- **Risk:** Maturin conflicts with `uv-dynamic-versioning` or pinned toolchains. **Mitigation:** Verify backend compatibility before switching and document any required pin updates.
+- **Risk:** Need to split bindings into a dedicated crate later. **Mitigation:** Keep PyO3 behind a feature flag and design wiring so manifest paths are easy to relocate.
+
+### Open Questions
+
+- Should validation run in CI immediately or remain manual until more APIs land?
+- Do we need a second extension module if multiple kernels ship, or can we keep a single shared module?
+- What criteria trigger promoting the bootstrap surface into a fuller API spec?
+
+## Status Tracking (to be updated by subagent)
+
+- **Current focus:** P0 build system wiring via maturin.
+- **Latest completed task:** Rust bindings shell exporting `EARTH_RADIUS_METERS` behind the `python` feature.
+- **Next up:** Python surface re-export and smoke test.
+
+## Lessons Learned (ongoing)
 
 - PyO3 0.22 requires using `Bound<PyModule>` in the module signature for `#[pymodule]`; the older `&PyModule` form no longer exposes `add`.
-
-## Out-of-scope for this pass
-
-- Final API design (function signatures, error mapping, data model).
-- Performance tuning or zero-copy array handling.
-- Packaging optimizations (manylinux builds, universal2, etc.).
-
-## Risks / Open Questions
-
-- Module naming: prefer `geodist._geodist_rs` to avoid top-level clutter; adjust if we later build multiple extensions.
-- Versioning: keep using `uv-dynamic-versioning` unless maturin conflicts; revisit if tags diverge.
-- Workspace structure: we may split bindings into a dedicated crate later if the Rust core needs to stay PyO3-free by default.
