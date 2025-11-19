@@ -1,22 +1,11 @@
 # pygeodist
 
-👉\[\[\[**This is the initial readme for your
-[simple-modern-uv](https://github.com/jlevy/simple-modern-uv) template.** Fill it in and
-delete this message!
-Below are general setup instructions that you may remove or keep and adapt for your
-project.\]\]\]
+Python bindings for `geodist`, providing Rust-backed geometric distance kernels for
+Python users once the initial API lands.
 
-* * *
-
-## Project Docs
-
-For how to install uv and Python, see [installation.md](installation.md).
-
-For development workflows, see [development.md](development.md).
-
-For instructions on publishing to PyPI, see [publishing.md](publishing.md).
-
-* * *
+- For installation and development setup, see the project-level docs in `../README.md`.
+- Publishing details (PyPI trusted publishing via GitHub Actions) also live in
+  `../README.md#publishing`.
 
 *This project was built from
 [simple-modern-uv](https://github.com/jlevy/simple-modern-uv).*

@@ -57,3 +57,10 @@ pip install pygeodist
 
 The project is in early active development. APIs may evolve until the initial
 stable release. Contributions, suggestions, and issue reports are welcome.
+
+## Tooling
+
+- Python uses [uv](https://docs.astral.sh/uv/). Install it via `curl -LsSf https://astral.sh/uv/install.sh | sh` or `brew install uv` on macOS, then provision a toolchain with `uv python install 3.13`.
+- Set up the Python environment with `cd pygeodist && uv sync --all-extras` (or `make install` for the same effect).
+- Common Python shortcuts from `pygeodist/Makefile`: `make lint`, `make test`, `make build`, `make clean`.
+- Rust work happens under `geodist-rs`; use `cargo run` or `cargo test` there when kernels and tests are added.
