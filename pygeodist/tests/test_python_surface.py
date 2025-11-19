@@ -1,0 +1,6 @@
+import geodist
+from pytest import approx
+
+
+def test_constant_reexported() -> None:
+    assert geodist.EARTH_RADIUS_METERS == approx(6_371_008.8)
