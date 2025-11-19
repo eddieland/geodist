@@ -51,7 +51,7 @@ geodist-rs/
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
 | P0 | Define core types (`Point`, `Distance`, error enum) and input validation | Types live in `geodist-rs/src/lib.rs`; invalid inputs return errors; degrees documented | Keep types FFI-friendly; include doc comments | Done |
-| P0 | Implement baseline great-circle `distance` and targeted unit tests | Function `distance(p1, p2)` returns meters; unit tests cover typical and polar/antipodal cases | Use `f64`; deterministic tolerances in tests | |
+| P0 | Implement baseline great-circle `geodesic_distance` and targeted unit tests | Function `geodesic_distance(p1, p2)` returns meters; unit tests cover typical and polar/antipodal cases | Use `f64`; deterministic tolerances in tests | Done |
 | P0 | Implement Hausdorff distance (directed and symmetric) over point slices | Functions `hausdorff(a, b)` and `hausdorff_directed(a, b)` reuse distance kernel; tests cover small sets and edge cases | Clarify empty-set behavior (error vs. zero) | |
 | P0 | Add batch helper (`distances_many`) and tests | Accepts slice of point pairs; returns `Vec<f64>` or error | Prefer iterator-based internal impl to share logic | |
 | P1 | Minimal Python binding surface | Expose distance and Hausdorff functions via `pyo3` or `ffi` scaffold with smoke tests in `pygeodist/tests` | Aim for parity with Rust API naming; skip perf tuning | |
@@ -78,9 +78,9 @@ geodist-rs/
 
 ## Status Tracking (to be updated by subagent)
 
-- **Current focus:** _Implement baseline great-circle distance_
-- **Latest completed task:** _Define core types_
-- **Next up:** _Implement Hausdorff distance_
+- **Current focus:** _Implement Hausdorff distance_
+- **Latest completed task:** _Implement baseline great-circle distance_
+- **Next up:** _Add batch helper_
 
 ## Lessons Learned (ongoing)
 

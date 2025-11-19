@@ -2,11 +2,16 @@
 //!
 //! - Angles are expressed in **degrees**.
 //! - Distances are expressed in **meters**.
-//! - Public constructors validate inputs and return [`GeodistError`] on failure.
+//! - Public constructors validate inputs and return [`GeodistError`] on
+//!   failure.
 //!
 //! Layouts stay simple (`#[repr(C)]`) to ease future FFI bindings.
 
 use std::fmt;
+
+mod distance;
+
+pub use distance::{geodesic_distance, EARTH_RADIUS_METERS};
 
 /// Error type for invalid input or derived values.
 ///
@@ -58,8 +63,9 @@ impl Point {
   ///
   /// # Errors
   ///
-  /// Returns [`GeodistError::InvalidLatitude`] or [`GeodistError::InvalidLongitude`]
-  /// when a coordinate is out of range or non-finite.
+  /// Returns [`GeodistError::InvalidLatitude`] or
+  /// [`GeodistError::InvalidLongitude`] when a coordinate is out of range or
+  /// non-finite.
   pub fn new(latitude: f64, longitude: f64) -> Result<Self, GeodistError> {
     validate_latitude(latitude)?;
     validate_longitude(longitude)?;
