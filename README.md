@@ -6,6 +6,12 @@
 operations—starting with Hausdorff distance—implemented in Rust with optional
 Python bindings via `pygeodist`.
 
+The differentiator is *witness point* access: every distance result comes with the
+specific control points that realized it, so you can audit and explain outcomes
+instead of treating distances as opaque numbers, which is critical wherever
+transparency matters (e.g., mapping QA, robotics safety checks, or scientific
+reproducibility).
+
 Key goals:
 
 - Robust geometric distance kernels (point–point, point–segment, polygon edges, etc.)
