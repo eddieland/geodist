@@ -19,7 +19,12 @@
 
 - Python: Ruff formatting/linting enforced; follow PEP 8, type-first design (`pyproject.toml` sets `strict = true` for mypy). Use snake_case for functions/vars, PascalCase for classes, module-level constants in SCREAMING_SNAKE_CASE.
 - Rust: Standard Rustfmt defaults; favor small modules and explicit imports. Use snake_case for fns/vars, CamelCase for types/traits.
-- Docs and examples: concise, imperative. Keep public APIs documented once they stabilize.
+
+## Documentation
+
+- Keep docs concise and imperative. Avoid trivial docstrings/comments, but document public APIs and non-obvious helpers once they stabilize.
+- Rust: Prefer RustDoc on public items and unsafe blocks; list what arguments mean, return values, panics/errors, and any invariants or safety preconditions. Include `# Safety` when relevant.
+- Python: Use docstrings on public functions/classes/methods when behavior or contracts are non-trivial. Cover parameters (units/valid ranges), return values, raised errors, and important side effects. Skip docstrings for obvious data holders or passthroughs.
 
 ## Specs
 
