@@ -2,8 +2,21 @@
 //!
 //! Inputs are degrees; output is meters.
 
+use rstar::{AABB, PointDistance, RTree, RTreeObject};
+
 use crate::algorithms::{GeodesicAlgorithm, Spherical};
 use crate::{Distance, GeodistError, Point};
+
+// Keep the O(n*m) fallback for small collections where index build overhead
+// outweighs nearest-neighbor savings.
+const MIN_INDEX_CANDIDATE_SIZE: usize = 32;
+const MAX_NAIVE_CROSS_PRODUCT: usize = 4_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HausdorffStrategy {
+  Naive,
+  Indexed,
+}
 
 /// Directed Hausdorff distance from set `a` to set `b`.
 ///
@@ -24,18 +37,13 @@ pub fn hausdorff_directed_with<A: GeodesicAlgorithm>(
   validate_points(a)?;
   validate_points(b)?;
 
-  let mut max_min: f64 = 0.0;
+  let strategy = choose_strategy(a.len(), b.len());
+  let meters = match strategy {
+    HausdorffStrategy::Naive => hausdorff_directed_naive(algorithm, a, b)?,
+    HausdorffStrategy::Indexed => hausdorff_directed_indexed(algorithm, a, b)?,
+  };
 
-  for origin in a {
-    let mut min_distance: f64 = f64::INFINITY;
-    for candidate in b {
-      let meters = algorithm.geodesic_distance(*origin, *candidate)?.meters();
-      min_distance = min_distance.min(meters);
-    }
-    max_min = max_min.max(min_distance);
-  }
-
-  Distance::from_meters(max_min)
+  Distance::from_meters(meters)
 }
 
 /// Symmetric Hausdorff distance between sets `a` and `b`.
@@ -44,11 +52,7 @@ pub fn hausdorff(a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
 }
 
 /// Symmetric Hausdorff distance using a custom geodesic algorithm.
-pub fn hausdorff_with<A: GeodesicAlgorithm>(
-  algorithm: &A,
-  a: &[Point],
-  b: &[Point],
-) -> Result<Distance, GeodistError> {
+pub fn hausdorff_with<A: GeodesicAlgorithm>(algorithm: &A, a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
   let forward = hausdorff_directed_with(algorithm, a, b)?;
   let reverse = hausdorff_directed_with(algorithm, b, a)?;
   let meters = forward.meters().max(reverse.meters());
@@ -67,6 +71,98 @@ fn validate_points(points: &[Point]) -> Result<(), GeodistError> {
     point.validate()?;
   }
   Ok(())
+}
+
+fn choose_strategy(a_len: usize, b_len: usize) -> HausdorffStrategy {
+  if should_use_naive(a_len, b_len) {
+    HausdorffStrategy::Naive
+  } else {
+    HausdorffStrategy::Indexed
+  }
+}
+
+fn should_use_naive(a_len: usize, b_len: usize) -> bool {
+  let min_size = a_len.min(b_len);
+  let cross_product = a_len.saturating_mul(b_len);
+  min_size < MIN_INDEX_CANDIDATE_SIZE || cross_product <= MAX_NAIVE_CROSS_PRODUCT
+}
+
+fn hausdorff_directed_naive<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  origins: &[Point],
+  candidates: &[Point],
+) -> Result<f64, GeodistError> {
+  let mut max_min: f64 = 0.0;
+
+  for origin in origins {
+    let mut min_distance: f64 = f64::INFINITY;
+    for candidate in candidates {
+      let meters = algorithm.geodesic_distance(*origin, *candidate)?.meters();
+      min_distance = min_distance.min(meters);
+    }
+    max_min = max_min.max(min_distance);
+  }
+
+  Ok(max_min)
+}
+
+fn hausdorff_directed_indexed<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  origins: &[Point],
+  candidates: &[Point],
+) -> Result<f64, GeodistError> {
+  let index = RTree::bulk_load(index_points(algorithm, candidates));
+  let mut max_min: f64 = 0.0;
+
+  for origin in origins {
+    let query = [origin.longitude, origin.latitude];
+    let nearest = index
+      .nearest_neighbor(&query)
+      .expect("candidate set validated as non-empty");
+    let meters = algorithm.geodesic_distance(*origin, nearest.point)?.meters();
+    max_min = max_min.max(meters);
+  }
+
+  Ok(max_min)
+}
+
+fn index_points<'a, A: GeodesicAlgorithm>(algorithm: &'a A, points: &[Point]) -> Vec<IndexedPoint<'a, A>> {
+  points
+    .iter()
+    .copied()
+    .map(|point| IndexedPoint { algorithm, point })
+    .collect()
+}
+
+#[derive(Clone, Copy)]
+struct IndexedPoint<'a, A> {
+  algorithm: &'a A,
+  point: Point,
+}
+
+impl<'a, A> RTreeObject for IndexedPoint<'a, A> {
+  type Envelope = AABB<[f64; 2]>;
+
+  fn envelope(&self) -> Self::Envelope {
+    AABB::from_point([self.point.longitude, self.point.latitude])
+  }
+}
+
+impl<'a, A: GeodesicAlgorithm> PointDistance for IndexedPoint<'a, A> {
+  fn distance_2(&self, point: &[f64; 2]) -> f64 {
+    let query = Point {
+      latitude: point[1],
+      longitude: point[0],
+    };
+
+    match self.algorithm.geodesic_distance(self.point, query) {
+      Ok(distance) => {
+        let meters = distance.meters();
+        meters * meters
+      }
+      Err(_) => f64::INFINITY,
+    }
+  }
 }
 
 #[cfg(test)]
@@ -133,5 +229,25 @@ mod tests {
 
     let distance = hausdorff_with(&ZeroAlgorithm, &a, &b).unwrap();
     assert_eq!(distance.meters(), 0.0);
+  }
+
+  #[test]
+  fn uses_index_for_large_sets() {
+    let a: Vec<Point> = (0..70).map(|i| Point::new(0.0, i as f64 * 0.1).unwrap()).collect();
+    let b: Vec<Point> = (0..70)
+      .map(|i| Point::new(0.0, i as f64 * 0.1 + 0.05).unwrap())
+      .collect();
+
+    let distance = hausdorff_directed(&a, &b).unwrap().meters();
+    let expected = geodesic_distance(a[0], b[0]).unwrap().meters();
+
+    assert!((distance - expected).abs() < 1e-6);
+  }
+
+  #[test]
+  fn strategy_prefers_naive_for_small_inputs() {
+    assert!(should_use_naive(10, 100));
+    assert!(should_use_naive(60, 60));
+    assert!(!should_use_naive(70, 70));
   }
 }

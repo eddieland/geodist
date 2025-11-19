@@ -2,10 +2,9 @@
 //!
 //! Inputs are degrees; output is meters.
 
+use super::GeodesicAlgorithm;
 use crate::constants::EARTH_RADIUS_METERS;
 use crate::{Distance, GeodistError, Point};
-
-use super::GeodesicAlgorithm;
 
 /// Baseline spherical algorithm.
 #[derive(Debug, Clone, Copy, Default)]
