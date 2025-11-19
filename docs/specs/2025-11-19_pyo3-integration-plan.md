@@ -30,6 +30,17 @@
    - `cd pygeodist && uv run maturin develop --features python --manifest-path ../geodist-rs/Cargo.toml`
    - `cd pygeodist && uv run pytest`
 
+## Status
+
+- ✅ (Step 1) Rust bindings shell: Added optional `python` feature, PyO3 dependency, and `_geodist_rs` module exporting `EARTH_RADIUS_METERS`; `cargo check` passes with and without the feature.
+- ⬜ (Step 2) Build system wiring: configure maturin/pyproject and build targets.
+- ⬜ (Step 3) Python surface: re-export constant and add smoke test.
+- ⬜ (Step 4) Validation: run maturin develop and pytest once wiring is in place.
+
+## Lessons Learned
+
+- PyO3 0.22 requires using `Bound<PyModule>` in the module signature for `#[pymodule]`; the older `&PyModule` form no longer exposes `add`.
+
 ## Out-of-scope for this pass
 
 - Final API design (function signatures, error mapping, data model).

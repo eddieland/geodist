@@ -1,5 +1,8 @@
 //! Public surface for geodist kernels and types.
 
+#[cfg(feature = "python")]
+mod python;
+
 mod constants;
 mod distance;
 mod hausdorff;

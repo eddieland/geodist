@@ -3,4 +3,9 @@ name = "geodist-rs"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+python = ["pyo3/extension-module"]
+
 [dependencies]
+pyo3 = { version = "0.22", optional = true }
