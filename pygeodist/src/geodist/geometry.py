@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 try:
     from typing import Self
 except ImportError:  # Python 3.10 compatibility
@@ -21,13 +23,26 @@ class Geometry:
 
     __slots__ = ("_handle", "_crs", "_size_hint")
 
-    def __init__(self, handle: GeometryHandle | None, *, crs: CRSLike = None, size_hint: int | None = None) -> None:
+    def __init__(
+        self,
+        handle: GeometryHandle | None,
+        *,
+        crs: CRSLike = None,
+        size_hint: int | None = None,
+    ) -> None:
+        """Initialize a geometry from an optional Rust handle, CRS, and size hint."""
         self._handle = handle
         self._crs = crs
         self._size_hint = size_hint
 
     @classmethod
-    def _from_handle(cls: type[Self], handle: GeometryHandle, *, crs: CRSLike = None, size_hint: int | None = None) -> Self:
+    def _from_handle(
+        cls,
+        handle: GeometryHandle,
+        *,
+        crs: CRSLike = None,
+        size_hint: int | None = None,
+    ) -> Self:
         """Construct a Python wrapper around an opaque Rust handle."""
         instance = cls.__new__(cls)
         Geometry.__init__(instance, handle=handle, crs=crs, size_hint=size_hint)
@@ -39,6 +54,7 @@ class Geometry:
         return self._crs
 
     def __eq__(self, other: object) -> bool:
+        """Check equality between two geometry objects."""
         if not isinstance(other, Geometry):
             return NotImplemented
         if self.__class__ is not other.__class__:
@@ -51,6 +67,7 @@ class Geometry:
         return bool(comparison)
 
     def __len__(self) -> int:
+        """Return the number of vertices, rings, or geometries, depending on type."""
         if self._size_hint is not None:
             return self._size_hint
         handle = self._require_handle("length lookup")
@@ -62,6 +79,7 @@ class Geometry:
             ) from exc
 
     def __repr__(self) -> str:
+        """Return a debug representation of the geometry object."""
         handle_state = "uninitialized" if self._handle is None else "handle=<opaque>"
         crs_repr = f", crs={self._crs!r}" if self._crs is not None else ""
         size_repr = f", size_hint={self._size_hint}" if self._size_hint is not None else ""
@@ -73,7 +91,8 @@ class Geometry:
         return self._handle
 
     @staticmethod
-    def _raise_missing_kernel(action: str) -> None:
+    def _raise_missing_kernel(action: str) -> NoReturn:
+        """Raise an error indicating that Rust kernels are not available."""
         raise KernelUnavailableError(
             f"Rust kernels are not available; cannot perform {action}. Build the extension to enable this operation."
         )
@@ -85,6 +104,7 @@ class Point(Geometry):
     __slots__ = ()
 
     def __init__(self, coordinate: Coordinate, crs: CRSLike = None) -> None:
+        """Initialize a point from a coordinate pair."""
         super().__init__(handle=None, crs=crs, size_hint=1)
         self._raise_missing_kernel("Point construction")
 
@@ -100,6 +120,7 @@ class LineString(Geometry):
     __slots__ = ()
 
     def __init__(self, coordinates: CoordinateSequence, crs: CRSLike = None) -> None:
+        """Initialize a linestring from a sequence of coordinates."""
         super().__init__(handle=None, crs=crs, size_hint=len(coordinates))
         self._raise_missing_kernel("LineString construction")
 
@@ -115,6 +136,7 @@ class Polygon(Geometry):
         holes: list[CoordinateSequence] | None = None,
         crs: CRSLike = None,
     ) -> None:
+        """Initialize a polygon from an exterior ring and optional interior holes."""
         ring_count = 1 + len(holes or [])
         super().__init__(handle=None, crs=crs, size_hint=ring_count)
         self._raise_missing_kernel("Polygon construction")
@@ -126,6 +148,7 @@ class GeometryCollection(Geometry):
     __slots__ = ()
 
     def __init__(self, geometries: list[Geometry], crs: CRSLike = None) -> None:
+        """Initialize a geometry collection from a list of geometries."""
         super().__init__(handle=None, crs=crs, size_hint=len(geometries))
         self._raise_missing_kernel("GeometryCollection construction")
 
