@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import NoReturn
 
 try:
-    from typing import Self
+    from typing import Self  # type: ignore[attr-defined] # < Python 3.11
 except ImportError:  # Python 3.10 compatibility
     from typing_extensions import Self
 
