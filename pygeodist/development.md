@@ -25,14 +25,17 @@ make install
 # Run uv sync, lint, and test (and also generate agent rules):
 make
 
-# Build wheel:
-make build
-
 # Linting:
 make lint
 
 # Run tests:
 make test
+
+# Build and install the Rust extension locally (PyO3 feature enabled):
+make develop
+
+# Build release wheels (Rust + Python):
+make build
 
 # Delete all the build artifacts:
 make clean

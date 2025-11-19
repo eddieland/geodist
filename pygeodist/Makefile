@@ -42,8 +42,8 @@ upgrade: ## Upgrade dependencies
 	uv sync --upgrade --all-extras --dev
 
 .PHONY: build
-build: ## Build the project
-	uv build
+build: ## Build wheel(s) with maturin (Rust extension + Python package)
+	uv run maturin build --release --out dist
 
 .PHONY: clean
 clean: ## Clean up build artifacts and caches
@@ -52,4 +52,9 @@ clean: ## Clean up build artifacts and caches
 	-rm -rf .pytest_cache/
 	-rm -rf .mypy_cache/
 	-rm -rf .venv/
+	-rm -rf ../geodist-rs/target/
 	-find . -type d -name "__pycache__" -exec rm -rf {} +
+
+.PHONY: develop
+develop: ## Build and install Rust extension into the uv environment
+	uv run maturin develop
