@@ -2,34 +2,25 @@
 //!
 //! Inputs are degrees; output is meters.
 
-use crate::constants::EARTH_RADIUS_METERS;
+use crate::algorithms::{GeodesicAlgorithm, Spherical};
 use crate::{Distance, GeodistError, Point};
 
 /// Compute great-circle (geodesic) distance between two geographic points in
-/// degrees.
+/// degrees using the default spherical algorithm.
 ///
 /// Returns a validated [`Distance`] in meters. Inputs are validated before
 /// calculations.
 pub fn geodesic_distance(p1: Point, p2: Point) -> Result<Distance, GeodistError> {
-  p1.validate()?;
-  p2.validate()?;
+  geodesic_distance_with(&Spherical, p1, p2)
+}
 
-  let lat1 = p1.latitude.to_radians();
-  let lat2 = p2.latitude.to_radians();
-  let delta_lat = (p2.latitude - p1.latitude).to_radians();
-  let delta_lon = (p2.longitude - p1.longitude).to_radians();
-
-  let sin_lat = (delta_lat / 2.0).sin();
-  let sin_lon = (delta_lon / 2.0).sin();
-
-  let a = sin_lat * sin_lat + lat1.cos() * lat2.cos() * sin_lon * sin_lon;
-  // Clamp to guard against minor floating error that could push `a` outside
-  // [0, 1] and cause NaNs.
-  let normalized_a = a.clamp(0.0, 1.0);
-  let c = 2.0 * normalized_a.sqrt().atan2((1.0 - normalized_a).sqrt());
-
-  let meters = EARTH_RADIUS_METERS * c;
-  Distance::from_meters(meters)
+/// Compute geodesic distance using a custom algorithm strategy.
+pub fn geodesic_distance_with<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  p1: Point,
+  p2: Point,
+) -> Result<Distance, GeodistError> {
+  algorithm.geodesic_distance(p1, p2)
 }
 
 /// Compute geodesic distances for many point pairs in a single call.
@@ -38,10 +29,15 @@ pub fn geodesic_distance(p1: Point, p2: Point) -> Result<Distance, GeodistError>
 /// meter distances in the same order. Validation is performed for every point;
 /// the first invalid coordinate returns an error and short-circuits.
 pub fn geodesic_distances(pairs: &[(Point, Point)]) -> Result<Vec<f64>, GeodistError> {
-  pairs
-    .iter()
-    .map(|(a, b)| geodesic_distance(*a, *b).map(|d| d.meters()))
-    .collect()
+  geodesic_distances_with(&Spherical, pairs)
+}
+
+/// Compute batch geodesic distances with a custom algorithm strategy.
+pub fn geodesic_distances_with<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  pairs: &[(Point, Point)],
+) -> Result<Vec<f64>, GeodistError> {
+  algorithm.geodesic_distances(pairs)
 }
 
 #[cfg(test)]
@@ -113,5 +109,43 @@ mod tests {
 
     let result = geodesic_distances(&pairs);
     assert!(matches!(result, Err(GeodistError::InvalidLatitude(95.0))));
+  }
+
+  #[test]
+  fn supports_custom_algorithm_for_single_distance() {
+    struct FakeAlgorithm;
+
+    impl GeodesicAlgorithm for FakeAlgorithm {
+      fn geodesic_distance(&self, _p1: Point, _p2: Point) -> Result<Distance, GeodistError> {
+        Distance::from_meters(42.0)
+      }
+    }
+
+    let origin = Point::new(0.0, 0.0).unwrap();
+    let destination = Point::new(1.0, 1.0).unwrap();
+
+    let meters = geodesic_distance_with(&FakeAlgorithm, origin, destination)
+      .unwrap()
+      .meters();
+    assert_eq!(meters, 42.0);
+  }
+
+  #[test]
+  fn supports_custom_algorithm_for_batch() {
+    struct ConstantAlgorithm;
+
+    impl GeodesicAlgorithm for ConstantAlgorithm {
+      fn geodesic_distance(&self, _p1: Point, _p2: Point) -> Result<Distance, GeodistError> {
+        Distance::from_meters(1.5)
+      }
+    }
+
+    let points = [
+      (Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 1.0).unwrap()),
+      (Point::new(10.0, 10.0).unwrap(), Point::new(10.0, 11.0).unwrap()),
+    ];
+
+    let results = geodesic_distances_with(&ConstantAlgorithm, &points).unwrap();
+    assert_eq!(results, vec![1.5, 1.5]);
   }
 }

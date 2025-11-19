@@ -58,8 +58,8 @@ geodist-rs/
 | P0 | Add batch helper (`geodesic_distances`) and tests | Accepts slice of point pairs; returns `Vec<f64>` or error | Prefer iterator-based internal impl to share logic | ✅ Done |
 | P1 | Minimal Python binding surface | Follow `2025-11-19_pyo3-integration-plan.md`: add feature-gated PyO3 module exporting a trivial constant for wheel smoke tests, then expand toward distance/Hausdorff once stable | Keep module named `geodist._geodist_rs` (or equivalent) to avoid namespace clutter; PyO3 remains optional | ✅ Done |
 | P1 | Benchmark harness stub | Add Criterion (or feature-gated) bench for distance and Hausdorff | Capture baseline numbers for future optimization | ✅ Done |
-| P2 | Pluggable algorithm abstraction | Trait for algorithm strategy; spherical great-circle as default impl; Hausdorff accepts strategy | Enables drop-in higher-accuracy algorithms later | 📝 Planned |
-| P2 | Optional spatial index acceleration | Prototype `rstar` (or similar) backed nearest-neighbor search to speed Hausdorff on large sets | Keep behind feature flag to preserve zero-dep core | 📝 Planned |
+| P2 | Pluggable algorithm abstraction | Trait for algorithm strategy; spherical great-circle as default impl; Hausdorff accepts strategy | Enables drop-in higher-accuracy algorithms later | ✅ Done |
+| P1 | Spatial index acceleration | Make `rstar`-backed nearest-neighbor search the default fast path for Hausdorff on large sets; keep a pure O(n*m) fallback for tiny inputs/tests | `rstar` becomes a baseline dependency; document when we fall back to the naive path | 📝 Planned |
 | P3 | Extended geodesic options | Optional ellipsoid selection, bearing output, and filtered/Hausdorff variants (e.g., clipped by bbox) | Only wire shapes; implementation can follow later | 📝 Planned |
 
 ### Risks & Mitigations
@@ -68,7 +68,7 @@ geodist-rs/
 - **Risk:** FFI surface churn when Python bindings land. **Mitigation:** Keep argument/return types minimal and C-friendly; gate breaking changes behind feature flags once stable.
 - **Risk:** Performance regressions once higher-accuracy methods are added. **Mitigation:** Add a benchmark harness early and document tolerances for CI thresholds.
 - **Risk:** Hausdorff over large point sets can be O(n*m). **Mitigation:** Document complexity; add early pruning options (bbox, thresholds) in future iterations.
-- **Risk:** Introducing spatial index deps increases build/download surface. **Mitigation:** Ship zero-dep core; gate `rstar` under a feature with clear benchmarks.
+- **Risk:** Introducing spatial index deps increases build/download surface. **Mitigation:** Accept `rstar` as a default dep; keep a documented fallback path and bench both to justify the added crate.
 - **Risk:** PyO3 feature could bloat builds or change linker expectations. **Mitigation:** Keep `python` feature off by default, mirror steps in the PyO3 plan, and ensure the core crate still builds as `rlib` without PyO3 present.
 
 ### Open Questions
@@ -76,15 +76,16 @@ geodist-rs/
 - Should angles be accepted in degrees only, or allow radians behind a feature flag?
 - Do we need a soft-dependency on `geo`/`proj` crates for validation, or keep zero-deps initially?
 - How much error tolerance is acceptable for the baseline spherical model in initial tests (e.g., 1e-4 relative vs. fixed meters)?
-- Should spatial indexing (`rstar`) ship as an optional feature now, or defer until we profile typical data sizes?
+- **Heuristic:** Default to the naive O(n*m) path when `min(|A|, |B|) < 32` or `|A| * |B| <= 4_000` (keeps tiny cases fast and cheap). Build an R*-tree over the larger set otherwise; rebalance if we later expose batch updates. Validate/tune this threshold with Criterion benches (structured like Shapely/GEOS patterns of switching once index build amortizes ~log n query cost around a few dozen nodes).
 - Should PyO3 bindings live in-core behind a feature or move to a dedicated bindings crate once APIs solidify?
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Minimal Python binding surface_
-- **Next up:** _Pluggable algorithm abstraction_
+- **Latest completed task:** _Pluggable algorithm abstraction_
+- **Next up:** _Spatial index acceleration_
 
 ## Lessons Learned (ongoing)
 
 - Criterion is feature-gated to keep the default crate dependency-free.
 - PyO3 module compiles cleanly behind the `python` feature when using the 0.22 `Bound<PyModule>` signature.
+- Strategy trait keeps the public API stable while letting Hausdorff and batch helpers swap algorithms without call-site churn.

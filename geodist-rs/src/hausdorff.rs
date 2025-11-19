@@ -1,14 +1,24 @@
-//! Hausdorff distance between point sets using the spherical geodesic kernel.
+//! Hausdorff distance between point sets using the geodesic kernel.
 //!
 //! Inputs are degrees; output is meters.
 
-use crate::{Distance, GeodistError, Point, geodesic_distance};
+use crate::algorithms::{GeodesicAlgorithm, Spherical};
+use crate::{Distance, GeodistError, Point};
 
 /// Directed Hausdorff distance from set `a` to set `b`.
 ///
 /// Returns the maximum, over all points in `a`, of the minimum distance to any
 /// point in `b`.
 pub fn hausdorff_directed(a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
+  hausdorff_directed_with(&Spherical, a, b)
+}
+
+/// Directed Hausdorff distance using a custom geodesic algorithm.
+pub fn hausdorff_directed_with<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  a: &[Point],
+  b: &[Point],
+) -> Result<Distance, GeodistError> {
   ensure_non_empty(a)?;
   ensure_non_empty(b)?;
   validate_points(a)?;
@@ -19,7 +29,7 @@ pub fn hausdorff_directed(a: &[Point], b: &[Point]) -> Result<Distance, GeodistE
   for origin in a {
     let mut min_distance: f64 = f64::INFINITY;
     for candidate in b {
-      let meters = geodesic_distance(*origin, *candidate)?.meters();
+      let meters = algorithm.geodesic_distance(*origin, *candidate)?.meters();
       min_distance = min_distance.min(meters);
     }
     max_min = max_min.max(min_distance);
@@ -30,8 +40,17 @@ pub fn hausdorff_directed(a: &[Point], b: &[Point]) -> Result<Distance, GeodistE
 
 /// Symmetric Hausdorff distance between sets `a` and `b`.
 pub fn hausdorff(a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
-  let forward = hausdorff_directed(a, b)?;
-  let reverse = hausdorff_directed(b, a)?;
+  hausdorff_with(&Spherical, a, b)
+}
+
+/// Symmetric Hausdorff distance using a custom geodesic algorithm.
+pub fn hausdorff_with<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  a: &[Point],
+  b: &[Point],
+) -> Result<Distance, GeodistError> {
+  let forward = hausdorff_directed_with(algorithm, a, b)?;
+  let reverse = hausdorff_directed_with(algorithm, b, a)?;
   let meters = forward.meters().max(reverse.meters());
   Distance::from_meters(meters)
 }
@@ -53,6 +72,7 @@ fn validate_points(points: &[Point]) -> Result<(), GeodistError> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::geodesic_distance;
 
   #[test]
   fn identical_sets_have_zero_distance() {
@@ -96,5 +116,22 @@ mod tests {
 
     let result = hausdorff_directed(&[bad_point], &[good_point]);
     assert!(matches!(result, Err(GeodistError::InvalidLatitude(95.0))));
+  }
+
+  #[test]
+  fn accepts_custom_algorithm_strategy() {
+    struct ZeroAlgorithm;
+
+    impl GeodesicAlgorithm for ZeroAlgorithm {
+      fn geodesic_distance(&self, _p1: Point, _p2: Point) -> Result<Distance, GeodistError> {
+        Distance::from_meters(0.0)
+      }
+    }
+
+    let a = [Point::new(0.0, 0.0).unwrap()];
+    let b = [Point::new(10.0, 10.0).unwrap()];
+
+    let distance = hausdorff_with(&ZeroAlgorithm, &a, &b).unwrap();
+    assert_eq!(distance.meters(), 0.0);
   }
 }
