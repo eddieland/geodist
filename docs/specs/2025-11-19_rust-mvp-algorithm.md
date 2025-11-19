@@ -12,6 +12,31 @@
 - Avoid pinning to a specific ellipsoid implementation yet; start with a sane default (WGS84) and leave room for injectable models later.
 - Design for easy FFI exposure (simple structs/enums, `#[repr(C)]` when needed) so `pygeodist` can bind without churn.
 
+## Target Project Structure (Rust Crate)
+
+```plaintext
+geodist-rs/
+├── Cargo.toml
+├── benches/                  # Criterion benches gated behind `bench` feature
+│   └── distance.rs
+├── src/
+│   ├── lib.rs                # Public surface: re-exports, feature flags, error/types module wiring
+│   ├── main.rs               # Thin CLI wrapper; uses lib API, no logic lives here
+│   ├── types.rs              # Point, Distance, Error enums/structs; validation helpers
+│   ├── distance.rs           # Great-circle implementations and batch helpers
+│   ├── hausdorff.rs          # Directed/symmetric Hausdorff built on distance kernels
+│   └── algorithms/           # Pluggable strategies (spherical default, future ellipsoid/planar)
+│       ├── mod.rs
+│       └── spherical.rs
+├── tests/                    # Integration tests mirroring public API (distance, hausdorff, batches)
+└── rust-toolchain.toml
+```
+
+- Keep the entry points discoverable in `lib.rs`; modules stay small and problem-focused.
+- New algorithms land under `algorithms/` and are selected via features; API remains stable.
+- Benchmarks and tests must use the library API to prevent drift between CLI and bindings.
+- The structure is a target, not a straitjacket: if modules grow unwieldy or a layout stops making sense, reorganize with clear rationale and update this spec to match the implemented reality.
+
 ## Target Capabilities
 
 1. Compute great-circle distance between two latitude/longitude pairs (degrees in, meters out) using a baseline spherical model (WGS84 radius).
