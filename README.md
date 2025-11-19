@@ -1,63 +1,66 @@
 # geodist
 
-**High-performance geometric distance algorithms with Rust and Python bindings.**
+**High-performance geometric distance algorithms with Rust kernels and Python bindings.**
 
-`geodist` provides fast, exact, and index-accelerated geometric distance
-operations—starting with Hausdorff distance—implemented in Rust with optional
-Python bindings via `pygeodist`.
-
-The differentiator is *witness point* access: every distance result comes with the
-specific control points that realized it, so you can audit and explain outcomes
-instead of treating distances as opaque numbers, which is critical wherever
-transparency matters (e.g., mapping QA, robotics safety checks, or scientific
-reproducibility).
-
-Key goals:
-
-- Robust geometric distance kernels (point–point, point–segment, polygon edges, etc.)
-- Full *witness point* reporting (the exact control points that determine the distance)
-- R-tree and other spatial indexing accelerators for performance
-- Clean Rust API (`geodist-rs`)
-- Easy Python installation via prebuilt wheels (`pygeodist`)
-- Eventually competitive with Shapely/GEOS performance
-
-This project aims to become a flexible Rust geometry kernel for distance
-computations, suitable for GIS, computer vision, robotics, and scientific
-computing applications.
+`geodist` focuses on transparent distance calculations you can audit and explain
+rather than treating results as opaque numbers. The Rust crate provides the core
+geodesic kernels; Python bindings will layer ergonomic geometry wrappers once
+the Rust surface settles.
 
 ## Crates & Packages
 
-| Component      | Purpose                               | Link            |
-|----------------|---------------------------------------|-----------------|
-| **geodist-rs** | Rust crate providing core algorithms  | *(coming soon)* |
-| **pygeodist**  | Python bindings (PyO3 + maturin)      | *(coming soon)* |
+| Component      | What exists today                                   | Path |
+|----------------|-----------------------------------------------------|------|
+| **geodist-rs** | Rust crate with geodesic distance + Hausdorff APIs  | `geodist-rs/` |
+| **pygeodist**  | Python package with a PyO3 extension smoke test     | `pygeodist/` |
 
-## Features (current & roadmap)
+## What works now
 
-- [ ] Hausdorff distance (directed + undirected)
-- [ ] Witness point pairs for all metrics
-- [ ] R-tree accelerated distance search
-- [ ] LineString/Polygon sampling & densification
-- [ ] Geometry type coverage (Point, LineString, Polygon, Multi*)
-- [ ] Parallel computation (rayon)
-- [ ] Frechét distance (future)
-- [ ] Chamfer distance (future)
+- Validated geodesic primitives (`Point`, `Distance`, `Ellipsoid`, `BoundingBox`) with strict input checking.
+- Great-circle distance on a spherical Earth (WGS84 mean radius by default) plus custom radius/ellipsoid helpers.
+- Batch distance calculation for many point pairs.
+- Initial/final bearing output that reuses the distance kernel.
+- Directed and symmetric Hausdorff distance over point sets, with bounding-box-clipped variants and an automatic switch between an `rstar` index and an O(n*m) fallback for tiny inputs.
+- Feature-gated PyO3 module exposing `EARTH_RADIUS_METERS` for Python wheel smoke tests (future bindings will forward the Rust kernels).
 
-## Installation
+## Roadmap highlights
 
-### Rust
+- Witness point reporting for all metrics.
+- Geometry coverage beyond point sets (LineString/Polygon sampling, densification).
+- Parallel computation paths and richer distance metrics (Frechét, Chamfer).
+- Full Python geometry wrappers and vectorized operations backed by the Rust kernels.
 
-```bash
-cargo add geodist-rs
+## Rust quickstart
+
+```rust
+use geodist_rs::{Point, geodesic_distance, geodesic_with_bearings, hausdorff};
+
+let origin = Point::new(40.7128, -74.0060)?;
+let destination = Point::new(51.5074, -0.1278)?;
+
+let meters = geodesic_distance(origin, destination)?.meters();
+let bearings = geodesic_with_bearings(origin, destination)?;
+
+let path_a = [origin, Point::new(40.0, -73.5)?];
+let path_b = [destination, Point::new(51.0, -0.2)?];
+let hausdorff_meters = hausdorff(&path_a, &path_b)?.meters();
 ```
 
-### Python
+While the API stabilizes, use the crate from this workspace or add it as a path
+dependency.
+
+## Python quickstart (smoke test)
+
+The Python package includes the PyO3 extension stub and a small Typer CLI to
+confirm the extension loads. Kernels are not wired into the Python wrapper yet.
 
 ```bash
-pip install pygeodist
+cd pygeodist
+uv sync --all-extras --dev
+uv run maturin develop  # builds the extension module
+uv run geodist info     # prints whether the extension loaded
+uv run pytest           # exercises the stub surface
 ```
-
-(Wheels for macOS, Linux, Windows planned.)
 
 ## Project Status
 
@@ -67,16 +70,6 @@ stable release. Contributions, suggestions, and issue reports are welcome.
 ## Tooling
 
 - Python uses [uv](https://docs.astral.sh/uv/). Install it via `curl -LsSf https://astral.sh/uv/install.sh | sh` or `brew install uv` on macOS, then provision a toolchain with `uv python install 3.13`.
-- Set up the Python environment with `cd pygeodist && uv sync --all-extras` (or `make install` for the same effect).
+- Set up the Python environment with `cd pygeodist && uv sync --all-extras` (or `make install` for the same effect). Run `uv run maturin develop` after Rust changes to rebuild the extension.
 - Common Python shortcuts from `pygeodist/Makefile`: `make lint`, `make test`, `make build`, `make clean`.
-- Rust work happens under `geodist-rs`; use `cargo run` or `cargo test` there when kernels and tests are added.
-
-## Python Binding Validation
-
-Validate the bootstrap Python binding end-to-end in `pygeodist/`:
-
-1. `make install`
-2. `make develop`
-3. `make test`
-
-Under the hood these run `uv sync --all-extras --dev`, `uv run maturin develop`, and `uv run pytest` (rerun `maturin develop` after Rust changes).
+- Rust work happens under `geodist-rs`; use `cargo fmt`, `cargo clippy`, and `cargo nextest run` (or the root `make fmt|lint|test`) while iterating on kernels.
