@@ -1,5 +1,6 @@
-import geodist
 from pytest import approx
+
+import geodist
 
 
 def test_constant_reexported() -> None:
