@@ -133,11 +133,15 @@ Only 2D `Point` is supported today; 3D points and other geometry kinds raise
 
 ## Python API scope and non-goals
 
-- Public exports today: `EARTH_RADIUS_METERS`, error types (`GeodistError` and `InvalidGeometryError`), Rust-backed `Point` and `BoundingBox` wrappers, `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff (directed + clipped) helpers.
-- Non-goals: mirroring Shapely parity, accepting arbitrary geometry tuples, or silently coercing unsupported geometry kinds.
-- Interop guidance: install the `shapely` extra when needed; conversions are explicit, guard imports, and currently error for any geometry beyond `Point` instead of guessing.
-- Future Python surface (no promised dates): witness point reporting, additional geometry wrappers, and vectorized helpers once Rust exposes them (gated on Rust readiness to avoid drift).
-- The Typer CLI is for local development only and should not be treated as a user-facing entrypoint.
+- What ships today: `EARTH_RADIUS_METERS`, error types (`GeodistError`, `InvalidGeometryError`), Rust-backed `Point`/`BoundingBox`, geodesic distance + bearings, and Hausdorff (directed and clipped) helpers. Everything routes directly to the Rust kernels—there is no pure-Python fallback.
+- Explicit non-goals:
+  - Full Shapely/GeoPandas parity or best-effort shims for arbitrary geometry tuples, GeoJSON-like dicts, or mixed dimensionality.
+  - Implicit projections, datum shifts, or axis-order guessing; inputs are lat/lon degrees on WGS84 unless an explicit ellipsoid/radius is provided.
+  - Silently coercing unsupported shapes (e.g., LineString/Polygon) or 3D-to-2D drops; these raise `InvalidGeometryError` instead of guessing.
+  - Hidden fallback kernels that trade accuracy for convenience; failures should be loud so you know what the Rust core actually computed.
+- Interop guidance: install the `shapely` extra when you need conversions; imports stay guarded and only 2D `Point` is supported today.
+- Near-term additions (subject to Rust readiness): witness point reporting on all metrics, more geometry wrappers, and vectorized/batched helpers.
+- The Typer CLI is a developer smoke test, not a user-facing entrypoint; keep automation and scripting pinned to the Python API instead.
 
 ## Project Status
 
