@@ -54,25 +54,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          python - <<'PY'
-            import re
-            import sys
-            from pathlib import Path
-
-            version = "${RELEASE_VERSION}"
-            targets = [
-                ("geodist-rs/Cargo.toml", r'(?m)^version = "(.*?)"'),
-                ("pygeodist/pyproject.toml", r'(?m)^version = "(.*?)"'),
-            ]
-
-            for path, pattern in targets:
-                text = Path(path).read_text()
-                new_text, count = re.subn(pattern, f'version = "{version}"', text, count=1)
-                if count != 1:
-                    sys.stderr.write(f"Could not update version in {path}; pattern not found.\n")
-                    sys.exit(1)
-                Path(path).write_text(new_text)
-          PY
+          python .github/scripts/bump_version.py "${RELEASE_VERSION}"
 
       - name: Show diff
         run: git diff --stat
