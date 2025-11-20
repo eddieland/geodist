@@ -1,4 +1,4 @@
-name: Release Publishing (dry-run default)
+name: Release Publishing
 
 on:
   push:
