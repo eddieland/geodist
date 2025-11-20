@@ -107,6 +107,14 @@ jobs:
         with:
           workspaces: "geodist-rs -> target"
 
+      - name: Cargo fmt
+        working-directory: geodist-rs
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        working-directory: geodist-rs
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
       - name: Cargo build
         working-directory: geodist-rs
         run: cargo build --workspace
