@@ -14,10 +14,12 @@ pub(crate) struct EcefPoint {
 }
 
 impl EcefPoint {
+  /// Construct an ECEF coordinate with meter components.
   pub(crate) const fn new(x: f64, y: f64, z: f64) -> Self {
     Self { x, y, z }
   }
 
+  /// Return the squared Euclidean distance between two ECEF points in meters.
   pub(crate) fn squared_distance_to(self, other: Self) -> f64 {
     let dx = self.x - other.x;
     let dy = self.y - other.y;
@@ -25,6 +27,7 @@ impl EcefPoint {
     dx * dx + dy * dy + dz * dz
   }
 
+  /// Return the straight-line Euclidean distance between two ECEF points.
   pub(crate) fn distance_to(self, other: Self) -> f64 {
     self.squared_distance_to(other).sqrt()
   }
@@ -234,6 +237,11 @@ pub fn geodesic_with_bearings_on_ellipsoid(
   geodesic_with_bearings_on_radius(radius_meters, p1, p2)
 }
 
+/// Validate inputs and compute distance and bearings on a spherical model.
+///
+/// The radius has already been validated by the caller. Bearings are
+/// normalized to `[0, 360)`, and the distance is returned as a checked
+/// [`Distance`].
 fn geodesic_with_bearings_inner(radius_meters: f64, p1: Point, p2: Point) -> Result<GeodesicSolution, GeodistError> {
   p1.validate()?;
   p2.validate()?;
@@ -272,12 +280,14 @@ fn geodesic_with_bearings_inner(radius_meters: f64, p1: Point, p2: Point) -> Res
   })
 }
 
+/// Compute the forward azimuth from one latitude to another in degrees.
 fn initial_bearing_from_radians(lat1: f64, lat2: f64, delta_lon: f64) -> f64 {
   let y = delta_lon.sin() * lat2.cos();
   let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * delta_lon.cos();
   normalize_bearing(y.atan2(x).to_degrees())
 }
 
+/// Normalize a bearing in degrees to the `[0, 360)` range.
 fn normalize_bearing(mut degrees: f64) -> f64 {
   degrees %= 360.0;
   if degrees < 0.0 {
@@ -286,6 +296,15 @@ fn normalize_bearing(mut degrees: f64) -> f64 {
   degrees
 }
 
+/// Convert a geodetic point to its ECEF Cartesian representation.
+///
+/// Inputs are degrees for latitude/longitude and meters for altitude. The
+/// provided ellipsoid defines the reference axes used for the conversion and
+/// is assumed to be pre-validated by the caller.
+///
+/// # Errors
+///
+/// Returns the first [`GeodistError`] encountered validating the input point.
 pub(crate) fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<EcefPoint, GeodistError> {
   point.validate()?;
 
