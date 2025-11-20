@@ -17,15 +17,10 @@ def test_constant_reexported() -> None:
 
 def test_public_api_reflects_trimmed_surface() -> None:
     assert geodist.__all__ == (
-        "CRSValidationError",
         "EARTH_RADIUS_METERS",
         "GeodistError",
-        "GeometryTypeError",
         "InvalidGeometryError",
-        "KernelExecutionError",
-        "KernelUnavailableError",
         "Point",
-        "VectorizationError",
     )
 
     # Ensure the public Point wrapper is wired to the module import.
