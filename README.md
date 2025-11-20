@@ -83,8 +83,9 @@ uv run pytest           # exercises the stub surface
 ## Python API scope and non-goals
 
 - Public exports today: `EARTH_RADIUS_METERS` and error types (`GeodistError` and the derived error classes).
-- Rust-backed geometry wrappers will mirror the Rust structs once exposed; until then the package does not promise a Shapely-like surface.
-- Optional interop helpers for Shapely will arrive later and stay off the default dependency tree.
+- Non-goals: mirroring Shapely parity, accepting arbitrary geometry tuples, or silently coercing unsupported geometry kinds.
+- Interop guidance: install the `shapely` extra when needed; conversions are explicit, guard imports, and currently error for any geometry beyond `Point` instead of guessing.
+- Future Python surface (no promised dates): wrappers around the Rust kernels for geodesic distance/bearings, Hausdorff (including bounding-box-clipped variants), and `LineString`/`Polygon` once Rust exposes them (gated on Rust readiness to avoid drift).
 - The Typer CLI is for local development only and should not be treated as a user-facing entrypoint.
 
 ## Project Status

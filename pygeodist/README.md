@@ -11,6 +11,13 @@ built out; new bindings will be added as the Rust surface stabilizes.
 *This project was built from
 [simple-modern-uv](https://github.com/jlevy/simple-modern-uv).*
 
+## API scope and non-goals
+
+- Public exports today: `EARTH_RADIUS_METERS`, `GeodistError`, `InvalidGeometryError`, and the `Point` wrapper once the extension is built.
+- Non-goals: mirroring Shapely's API, accepting free-form geometry tuples, or silently coercing unsupported shapes.
+- Future Python surface (gated on Rust kernels, no promised timeline): wrappers for geodesic distance/bearings, Hausdorff (including bounding-box-clipped variants), and additional geometry wrappers once Rust exposes them.
+- The Typer CLI (`uv run geodist info`) is a dev-only helper to confirm the extension loads.
+
 ## Shapely interoperability
 
 Shapely is optional. Install the extra if you want to bridge geodist points with
@@ -31,5 +38,5 @@ shapely_point = to_shapely(point)
 round_tripped = from_shapely(shapely_point)
 ```
 
-Only `Point` is supported for now; conversions for other geometries will arrive
-once the Rust kernels do.
+Only `Point` is supported for now; other geometry kinds raise `InvalidGeometryError`
+until the Rust kernels provide matching types.
