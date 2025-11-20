@@ -7,13 +7,24 @@
 //! Keep bindings in sync: any changes here must be mirrored in
 //! `pygeodist/src/geodist/_geodist_rs.pyi` in the same commit.
 #![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unexpected_cfgs)]
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
-use pyo3::wrap_pyfunction;
+use pyo3::{PyErr, create_exception, wrap_pyfunction};
 
 use crate::constants::EARTH_RADIUS_METERS;
 use crate::{distance, hausdorff as hausdorff_kernel, types};
+
+create_exception!(_geodist_rs, GeodistError, PyValueError);
+create_exception!(_geodist_rs, InvalidLatitudeError, GeodistError);
+create_exception!(_geodist_rs, InvalidLongitudeError, GeodistError);
+create_exception!(_geodist_rs, InvalidAltitudeError, GeodistError);
+create_exception!(_geodist_rs, InvalidDistanceError, GeodistError);
+create_exception!(_geodist_rs, InvalidRadiusError, GeodistError);
+create_exception!(_geodist_rs, InvalidEllipsoidError, GeodistError);
+create_exception!(_geodist_rs, InvalidBoundingBoxError, GeodistError);
+create_exception!(_geodist_rs, EmptyPointSetError, GeodistError);
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone)]
@@ -228,8 +239,7 @@ impl BoundingBox {
   /// Create a new bounding box from ordered corners.
   #[new]
   pub fn new(min_lat: f64, max_lat: f64, min_lon: f64, max_lon: f64) -> PyResult<Self> {
-    let bbox = types::BoundingBox::new(min_lat, max_lat, min_lon, max_lon)
-      .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let bbox = map_geodist_result(types::BoundingBox::new(min_lat, max_lat, min_lon, max_lon))?;
 
     Ok(Self {
       min_lat: bbox.min_lat,
@@ -253,12 +263,31 @@ impl BoundingBox {
   }
 }
 
+fn map_geodist_error(err: types::GeodistError) -> PyErr {
+  let message = err.to_string();
+
+  match err {
+    types::GeodistError::InvalidLatitude(_) => InvalidLatitudeError::new_err(message),
+    types::GeodistError::InvalidLongitude(_) => InvalidLongitudeError::new_err(message),
+    types::GeodistError::InvalidAltitude(_) => InvalidAltitudeError::new_err(message),
+    types::GeodistError::InvalidDistance(_) => InvalidDistanceError::new_err(message),
+    types::GeodistError::InvalidRadius(_) => InvalidRadiusError::new_err(message),
+    types::GeodistError::InvalidEllipsoid { .. } => InvalidEllipsoidError::new_err(message),
+    types::GeodistError::InvalidBoundingBox { .. } => InvalidBoundingBoxError::new_err(message),
+    types::GeodistError::EmptyPointSet => EmptyPointSetError::new_err(message),
+  }
+}
+
+fn map_geodist_result<T>(result: Result<T, types::GeodistError>) -> PyResult<T> {
+  result.map_err(map_geodist_error)
+}
+
 fn map_to_point(handle: &Point) -> PyResult<types::Point> {
-  types::Point::new(handle.lat, handle.lon).map_err(|err| PyValueError::new_err(err.to_string()))
+  map_geodist_result(types::Point::new(handle.lat, handle.lon))
 }
 
 fn map_to_point3d(handle: &Point3D) -> PyResult<types::Point3D> {
-  types::Point3D::new(handle.lat, handle.lon, handle.altitude_m).map_err(|err| PyValueError::new_err(err.to_string()))
+  map_geodist_result(types::Point3D::new(handle.lat, handle.lon, handle.altitude_m))
 }
 
 fn map_to_points(handles: &[Point]) -> PyResult<Vec<types::Point>> {
@@ -270,8 +299,12 @@ fn map_to_points3d(handles: &[Point3D]) -> PyResult<Vec<types::Point3D>> {
 }
 
 fn map_to_bounding_box(handle: &BoundingBox) -> PyResult<types::BoundingBox> {
-  types::BoundingBox::new(handle.min_lat, handle.max_lat, handle.min_lon, handle.max_lon)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+  map_geodist_result(types::BoundingBox::new(
+    handle.min_lat,
+    handle.max_lat,
+    handle.min_lon,
+    handle.max_lon,
+  ))
 }
 
 #[pyfunction]
@@ -279,8 +312,7 @@ fn geodesic_distance(p1: &Point, p2: &Point) -> PyResult<f64> {
   let origin = map_to_point(p1)?;
   let destination = map_to_point(p2)?;
 
-  let distance =
-    distance::geodesic_distance(origin, destination).map_err(|err| PyValueError::new_err(err.to_string()))?;
+  let distance = map_geodist_result(distance::geodesic_distance(origin, destination))?;
 
   Ok(distance.meters())
 }
@@ -289,8 +321,7 @@ fn geodesic_distance(p1: &Point, p2: &Point) -> PyResult<f64> {
 fn geodesic_with_bearings(p1: &Point, p2: &Point) -> PyResult<GeodesicSolution> {
   let origin = map_to_point(p1)?;
   let destination = map_to_point(p2)?;
-  let solution =
-    distance::geodesic_with_bearings(origin, destination).map_err(|err| PyValueError::new_err(err.to_string()))?;
+  let solution = map_geodist_result(distance::geodesic_with_bearings(origin, destination))?;
 
   Ok(solution.into())
 }
@@ -301,7 +332,7 @@ fn geodesic_distance_3d(p1: &Point3D, p2: &Point3D) -> PyResult<f64> {
   let destination = map_to_point3d(p2)?;
   distance::geodesic_distance_3d(origin, destination)
     .map(|distance| distance.meters())
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -311,7 +342,7 @@ fn hausdorff_directed(a: Vec<Point>, b: Vec<Point>) -> PyResult<HausdorffDirecte
 
   hausdorff_kernel::hausdorff_directed(&points_a, &points_b)
     .map(HausdorffDirectedWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -321,7 +352,7 @@ fn hausdorff(a: Vec<Point>, b: Vec<Point>) -> PyResult<HausdorffWitness> {
 
   hausdorff_kernel::hausdorff(&points_a, &points_b)
     .map(HausdorffWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -336,7 +367,7 @@ fn hausdorff_directed_clipped(
 
   hausdorff_kernel::hausdorff_directed_clipped(&points_a, &points_b, bbox)
     .map(HausdorffDirectedWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -347,7 +378,7 @@ fn hausdorff_clipped(a: Vec<Point>, b: Vec<Point>, bounding_box: &BoundingBox) -
 
   hausdorff_kernel::hausdorff_clipped(&points_a, &points_b, bbox)
     .map(HausdorffWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -357,7 +388,7 @@ fn hausdorff_directed_3d(a: Vec<Point3D>, b: Vec<Point3D>) -> PyResult<Hausdorff
 
   hausdorff_kernel::hausdorff_directed_3d(&points_a, &points_b)
     .map(HausdorffDirectedWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -367,7 +398,7 @@ fn hausdorff_3d(a: Vec<Point3D>, b: Vec<Point3D>) -> PyResult<HausdorffWitness> 
 
   hausdorff_kernel::hausdorff_3d(&points_a, &points_b)
     .map(HausdorffWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -382,7 +413,7 @@ fn hausdorff_directed_clipped_3d(
 
   hausdorff_kernel::hausdorff_directed_clipped_3d(&points_a, &points_b, bbox)
     .map(HausdorffDirectedWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pyfunction]
@@ -393,12 +424,24 @@ fn hausdorff_clipped_3d(a: Vec<Point3D>, b: Vec<Point3D>, bounding_box: &Boundin
 
   hausdorff_kernel::hausdorff_clipped_3d(&points_a, &points_b, bbox)
     .map(HausdorffWitness::from)
-    .map_err(|err| PyValueError::new_err(err.to_string()))
+    .map_err(map_geodist_error)
 }
 
 #[pymodule]
-fn _geodist_rs(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _geodist_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add("EARTH_RADIUS_METERS", EARTH_RADIUS_METERS)?;
+  m.add("GeodistError", py.get_type_bound::<GeodistError>())?;
+  m.add("InvalidLatitudeError", py.get_type_bound::<InvalidLatitudeError>())?;
+  m.add("InvalidLongitudeError", py.get_type_bound::<InvalidLongitudeError>())?;
+  m.add("InvalidAltitudeError", py.get_type_bound::<InvalidAltitudeError>())?;
+  m.add("InvalidDistanceError", py.get_type_bound::<InvalidDistanceError>())?;
+  m.add("InvalidRadiusError", py.get_type_bound::<InvalidRadiusError>())?;
+  m.add("InvalidEllipsoidError", py.get_type_bound::<InvalidEllipsoidError>())?;
+  m.add(
+    "InvalidBoundingBoxError",
+    py.get_type_bound::<InvalidBoundingBoxError>(),
+  )?;
+  m.add("EmptyPointSetError", py.get_type_bound::<EmptyPointSetError>())?;
   m.add_class::<Point>()?;
   m.add_class::<Point3D>()?;
   m.add_class::<GeodesicSolution>()?;

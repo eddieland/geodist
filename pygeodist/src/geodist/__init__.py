@@ -10,7 +10,18 @@ from __future__ import annotations
 from typing import Final
 
 from . import _geodist_rs
-from .errors import GeodistError, InvalidGeometryError
+from .errors import (
+    EmptyPointSetError,
+    GeodistError,
+    InvalidAltitudeError,
+    InvalidBoundingBoxError,
+    InvalidDistanceError,
+    InvalidEllipsoidError,
+    InvalidGeometryError,
+    InvalidLatitudeError,
+    InvalidLongitudeError,
+    InvalidRadiusError,
+)
 from .geometry import BoundingBox, Point, Point3D
 from .ops import (
     GeodesicResult,
@@ -35,6 +46,14 @@ __all__ = (
     "EARTH_RADIUS_METERS",
     "GeodistError",
     "InvalidGeometryError",
+    "InvalidLatitudeError",
+    "InvalidLongitudeError",
+    "InvalidAltitudeError",
+    "InvalidDistanceError",
+    "InvalidRadiusError",
+    "InvalidEllipsoidError",
+    "InvalidBoundingBoxError",
+    "EmptyPointSetError",
     "BoundingBox",
     "Point",
     "Point3D",

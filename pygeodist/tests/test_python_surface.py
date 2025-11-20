@@ -20,6 +20,14 @@ def test_public_api_reflects_trimmed_surface() -> None:
         "EARTH_RADIUS_METERS",
         "GeodistError",
         "InvalidGeometryError",
+        "InvalidLatitudeError",
+        "InvalidLongitudeError",
+        "InvalidAltitudeError",
+        "InvalidDistanceError",
+        "InvalidRadiusError",
+        "InvalidEllipsoidError",
+        "InvalidBoundingBoxError",
+        "EmptyPointSetError",
         "BoundingBox",
         "Point",
         "Point3D",
@@ -44,3 +52,14 @@ def test_public_api_reflects_trimmed_surface() -> None:
     assert geodist.Point3D.__name__ == "Point3D"
     assert geodist.BoundingBox.__name__ == "BoundingBox"
     assert geodist.GeodesicResult.__name__ == "GeodesicResult"
+
+
+def test_rust_errors_preserve_types() -> None:
+    with pytest.raises(geodist.EmptyPointSetError):
+        geodist.hausdorff([], [])
+
+    with pytest.raises(geodist.InvalidLatitudeError):
+        geodist._geodist_rs.geodesic_distance(
+            geodist._geodist_rs.Point(120.0, 0.0),
+            geodist._geodist_rs.Point(0.0, 0.0),
+        )

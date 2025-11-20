@@ -8,6 +8,16 @@ from typing import Final
 
 EARTH_RADIUS_METERS: Final[float]
 
+class GeodistError(ValueError): ...
+class InvalidLatitudeError(GeodistError): ...
+class InvalidLongitudeError(GeodistError): ...
+class InvalidAltitudeError(GeodistError): ...
+class InvalidDistanceError(GeodistError): ...
+class InvalidRadiusError(GeodistError): ...
+class InvalidEllipsoidError(GeodistError): ...
+class InvalidBoundingBoxError(GeodistError): ...
+class EmptyPointSetError(GeodistError): ...
+
 class Point:
     lat: float
     lon: float
@@ -83,6 +93,15 @@ def hausdorff_clipped_3d(a: list[Point3D], b: list[Point3D], bounding_box: Bound
 
 __all__ = [
     "EARTH_RADIUS_METERS",
+    "GeodistError",
+    "InvalidLatitudeError",
+    "InvalidLongitudeError",
+    "InvalidAltitudeError",
+    "InvalidDistanceError",
+    "InvalidRadiusError",
+    "InvalidEllipsoidError",
+    "InvalidBoundingBoxError",
+    "EmptyPointSetError",
     "Point",
     "Point3D",
     "GeodesicSolution",
