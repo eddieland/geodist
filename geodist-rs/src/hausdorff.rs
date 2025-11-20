@@ -229,6 +229,10 @@ pub fn hausdorff_clipped_with<A: GeodesicAlgorithm>(
 ///
 /// Bounding is performed on latitude/longitude; altitude does not participate
 /// in the clipping filter.
+///
+/// # Errors
+/// Returns [`GeodistError::EmptyPointSet`] when filtering removes all points
+/// from either slice, or any validation error surfaced by [`Point3D::validate`].
 pub fn hausdorff_directed_clipped_3d(
   a: &[Point3D],
   b: &[Point3D],
@@ -238,6 +242,14 @@ pub fn hausdorff_directed_clipped_3d(
 }
 
 /// Directed 3D Hausdorff distance on a custom ellipsoid after clipping points.
+///
+/// Applies the same bounding semantics as [`hausdorff_directed_clipped_3d`] but
+/// allows callers to select the ellipsoid used for the ECEF projection.
+///
+/// # Errors
+/// Propagates validation and empty-set errors from
+/// [`hausdorff_directed_3d_on_ellipsoid`] and reports
+/// [`GeodistError::InvalidEllipsoid`] when axes are malformed.
 pub fn hausdorff_directed_clipped_3d_on_ellipsoid(
   ellipsoid: Ellipsoid,
   a: &[Point3D],
@@ -250,11 +262,25 @@ pub fn hausdorff_directed_clipped_3d_on_ellipsoid(
 }
 
 /// Symmetric 3D Hausdorff distance after bounding box clipping.
+///
+/// Filters both sets with `bounding_box` on latitude/longitude and returns the
+/// dominant directed distance using the default ellipsoid.
+///
+/// # Errors
+/// Returns [`GeodistError::EmptyPointSet`] when filtering removes all points
+/// from either slice, or any validation error surfaced by [`Point3D::validate`].
 pub fn hausdorff_clipped_3d(a: &[Point3D], b: &[Point3D], bounding_box: BoundingBox) -> Result<Distance, GeodistError> {
   hausdorff_clipped_3d_on_ellipsoid(Ellipsoid::wgs84(), a, b, bounding_box)
 }
 
 /// Symmetric 3D Hausdorff distance on a custom ellipsoid after bounding.
+///
+/// Delegates to [`hausdorff_directed_clipped_3d_on_ellipsoid`] in both
+/// directions, honoring the provided ellipsoid for ECEF conversion.
+///
+/// # Errors
+/// Propagates the same validation, empty-set, and ellipsoid errors as
+/// [`hausdorff_directed_clipped_3d_on_ellipsoid`].
 pub fn hausdorff_clipped_3d_on_ellipsoid(
   ellipsoid: Ellipsoid,
   a: &[Point3D],
