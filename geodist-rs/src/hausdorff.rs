@@ -23,21 +23,21 @@ pub struct HausdorffDirectedWitness {
 
 impl HausdorffDirectedWitness {
   /// Directed Hausdorff distance in meters.
-  pub fn distance(&self) -> Distance {
+  pub const fn distance(&self) -> Distance {
     self.distance
   }
 
   /// Index of the origin point in the source iterable.
   ///
   /// The index refers to the caller-supplied order prior to any clipping.
-  pub fn origin_index(&self) -> usize {
+  pub const fn origin_index(&self) -> usize {
     self.origin_index
   }
 
   /// Index of the nearest neighbor in the candidate iterable.
   ///
   /// The index refers to the caller-supplied order prior to any clipping.
-  pub fn candidate_index(&self) -> usize {
+  pub const fn candidate_index(&self) -> usize {
     self.candidate_index
   }
 
@@ -61,17 +61,17 @@ pub struct HausdorffWitness {
 
 impl HausdorffWitness {
   /// Maximum distance across both directed evaluations in meters.
-  pub fn distance(&self) -> Distance {
+  pub const fn distance(&self) -> Distance {
     self.distance
   }
 
   /// Directed witness from the first argument to the second.
-  pub fn a_to_b(&self) -> HausdorffDirectedWitness {
+  pub const fn a_to_b(&self) -> HausdorffDirectedWitness {
     self.a_to_b
   }
 
   /// Directed witness from the second argument back to the first.
-  pub fn b_to_a(&self) -> HausdorffDirectedWitness {
+  pub const fn b_to_a(&self) -> HausdorffDirectedWitness {
     self.b_to_a
   }
 
@@ -417,7 +417,7 @@ pub fn hausdorff_clipped_3d_on_ellipsoid(
   HausdorffWitness::new(forward, reverse)
 }
 
-fn ensure_non_empty<T>(points: &[T]) -> Result<(), GeodistError> {
+const fn ensure_non_empty<T>(points: &[T]) -> Result<(), GeodistError> {
   if points.is_empty() {
     return Err(GeodistError::EmptyPointSet);
   }

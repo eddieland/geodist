@@ -242,3 +242,9 @@ class BoundingBox:
             f"max_lon={self.max_lon}"
             ")"
         )
+
+    def __eq__(self, other: object) -> bool:
+        """Check equality with another BoundingBox."""
+        if not isinstance(other, BoundingBox):
+            return NotImplemented
+        return self.to_tuple() == other.to_tuple()

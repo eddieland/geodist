@@ -191,7 +191,7 @@ impl Distance {
   }
 
   /// Raw meter value.
-  pub fn meters(&self) -> f64 {
+  pub const fn meters(&self) -> f64 {
     self.meters
   }
 
@@ -229,7 +229,7 @@ impl Ellipsoid {
   }
 
   /// WGS84 ellipsoid parameters in meters.
-  pub fn wgs84() -> Self {
+  pub const fn wgs84() -> Self {
     Self {
       semi_major_axis_m: crate::constants::WGS84_SEMI_MAJOR_METERS,
       semi_minor_axis_m: crate::constants::WGS84_SEMI_MINOR_METERS,
@@ -316,7 +316,7 @@ fn validate_longitude(value: f64) -> Result<(), GeodistError> {
 }
 
 /// Validate that altitude is finite (meters).
-fn validate_altitude(value: f64) -> Result<(), GeodistError> {
+const fn validate_altitude(value: f64) -> Result<(), GeodistError> {
   if !value.is_finite() {
     return Err(GeodistError::InvalidAltitude(value));
   }

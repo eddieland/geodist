@@ -123,8 +123,8 @@ shapely_point = to_shapely(point)
 round_tripped = from_shapely(shapely_point)
 ```
 
-Only 2D `Point` is supported today; 3D points and other geometry kinds raise
-`InvalidGeometryError` until the Rust kernels expose matching types.
+`Point`, `Point3D`, and `BoundingBox` are supported; other geometry kinds still raise
+`TypeError`, and non-rectangular polygons raise `InvalidGeometryError`, until matching kernels land.
 
 ## Why PyO3 / Maturin?
 

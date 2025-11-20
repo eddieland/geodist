@@ -48,7 +48,7 @@ impl Spherical {
   }
 
   /// Radius used by the strategy (meters).
-  pub fn radius_meters(&self) -> f64 {
+  pub const fn radius_meters(&self) -> f64 {
     self.radius_meters
   }
 }
@@ -68,7 +68,7 @@ impl GeodesicAlgorithm for Spherical {
 ///
 /// Returns [`GeodistError`] if either point is invalid or if the meter value
 /// cannot be expressed as a valid [`Distance`].
-pub(crate) fn spherical_distance(radius_meters: f64, p1: Point, p2: Point) -> Result<Distance, GeodistError> {
+pub fn spherical_distance(radius_meters: f64, p1: Point, p2: Point) -> Result<Distance, GeodistError> {
   p1.validate()?;
   p2.validate()?;
 

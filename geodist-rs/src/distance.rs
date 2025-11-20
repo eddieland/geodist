@@ -7,7 +7,7 @@ use crate::{Distance, Ellipsoid, GeodistError, Point, Point3D};
 
 /// Earth-Centered, Earth-Fixed (ECEF) Cartesian coordinate in meters.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct EcefPoint {
+pub struct EcefPoint {
   pub(crate) x: f64,
   pub(crate) y: f64,
   pub(crate) z: f64,
@@ -47,17 +47,17 @@ pub struct GeodesicSolution {
 
 impl GeodesicSolution {
   /// Distance traveled along the geodesic in meters.
-  pub fn distance(&self) -> Distance {
+  pub const fn distance(&self) -> Distance {
     self.distance
   }
 
   /// Initial bearing (forward azimuth) in degrees, normalized to `[0, 360)`.
-  pub fn initial_bearing_degrees(&self) -> f64 {
+  pub const fn initial_bearing_degrees(&self) -> f64 {
     self.initial_bearing_degrees
   }
 
   /// Final bearing (reverse azimuth) in degrees, normalized to `[0, 360)`.
-  pub fn final_bearing_degrees(&self) -> f64 {
+  pub const fn final_bearing_degrees(&self) -> f64 {
     self.final_bearing_degrees
   }
 }
@@ -305,7 +305,7 @@ fn normalize_bearing(mut degrees: f64) -> f64 {
 /// # Errors
 ///
 /// Returns the first [`GeodistError`] encountered validating the input point.
-pub(crate) fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<EcefPoint, GeodistError> {
+pub fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<EcefPoint, GeodistError> {
   point.validate()?;
 
   let a = ellipsoid.semi_major_axis_m;

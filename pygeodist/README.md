@@ -38,8 +38,8 @@ shapely_point = to_shapely(point)
 round_tripped = from_shapely(shapely_point)
 ```
 
-Only `Point` is supported for now; other geometry kinds raise `InvalidGeometryError`
-until the Rust kernels provide matching types.
+`Point`, `Point3D`, and `BoundingBox` are supported. Other geometry kinds raise
+`TypeError`, and non-rectangular polygons raise `InvalidGeometryError`, until the Rust kernels provide matching types.
 
 ## Running the demo notebook
 

@@ -4,22 +4,12 @@ import importlib.util
 
 import pytest
 
-if importlib.util.find_spec("geodist._geodist_rs") is None:
-    pytest.skip("Rust extension is not built; skipping Shapely interop checks.", allow_module_level=True)
-
-from geodist import InvalidGeometryError, Point
+from geodist import BoundingBox, InvalidGeometryError, Point, Point3D
 from geodist.ext.shapely import from_shapely, to_shapely
 
 SHAPELY_AVAILABLE = importlib.util.find_spec("shapely.geometry") is not None
 
 
-@pytest.mark.skipif(SHAPELY_AVAILABLE, reason="Dependency is present; this guard test expects it missing.")
-def test_to_shapely_requires_optional_dependency() -> None:
-    with pytest.raises(ImportError):
-        to_shapely(Point(0.0, 0.0))
-
-
-@pytest.mark.skipif(not SHAPELY_AVAILABLE, reason="Shapely is not installed.")
 def test_roundtrip_converts_between_point_types() -> None:
     shapely_point = pytest.importorskip("shapely.geometry").Point
 
@@ -33,17 +23,57 @@ def test_roundtrip_converts_between_point_types() -> None:
     assert restored == source_point
 
 
-@pytest.mark.skipif(not SHAPELY_AVAILABLE, reason="Shapely is not installed.")
-def test_from_shapely_rejects_3d_points() -> None:
+def test_roundtrip_converts_3d_points() -> None:
     shapely_point = pytest.importorskip("shapely.geometry").Point
 
+    source_point = Point3D(1.0, 2.0, 3.0)
+    converted = to_shapely(source_point)
+    assert isinstance(converted, shapely_point)
+    assert converted.has_z is True
+    assert converted.x == pytest.approx(2.0)
+    assert converted.y == pytest.approx(1.0)
+    assert converted.z == pytest.approx(3.0)
+
+    restored = from_shapely(converted)
+    assert isinstance(restored, Point3D)
+    assert restored == source_point
+
+
+def test_from_shapely_rejects_non_points() -> None:
+    shapely_linestring = pytest.importorskip("shapely.geometry").LineString
+
+    with pytest.raises(TypeError):
+        from_shapely(shapely_linestring([(0.0, 0.0), (1.0, 0.0)]))
+
+
+def test_roundtrip_converts_bounding_boxes() -> None:
+    shapely_box = pytest.importorskip("shapely.geometry").box
+    shapely_polygon = pytest.importorskip("shapely.geometry").Polygon
+
+    bbox = BoundingBox(10.0, 20.0, -5.0, 15.0)
+    converted = to_shapely(bbox)
+    assert isinstance(converted, shapely_polygon)
+    assert converted.bounds == pytest.approx((-5.0, 10.0, 15.0, 20.0))
+
+    restored = from_shapely(converted)
+    assert restored == bbox
+
+    # Ensure rectangles remain supported regardless of construction helper.
+    restored_from_box = from_shapely(shapely_box(-5.0, 10.0, 15.0, 20.0))
+    assert restored_from_box == bbox
+
+
+def test_from_shapely_rejects_non_rectangular_polygons() -> None:
+    shapely_polygon = pytest.importorskip("shapely.geometry").Polygon
+
+    triangle = shapely_polygon([(0.0, 0.0), (2.0, 0.0), (1.0, 3.0)])
     with pytest.raises(InvalidGeometryError):
-        from_shapely(shapely_point(1.0, 2.0, 3.0))
+        from_shapely(triangle)
 
 
 @pytest.mark.skipif(not SHAPELY_AVAILABLE, reason="Shapely is not installed.")
-def test_from_shapely_rejects_non_points() -> None:
-    shapely_polygon = pytest.importorskip("shapely.geometry").Polygon
+def test_to_shapely_rejects_unknown_geometries() -> None:
+    class Dummy: ...
 
     with pytest.raises(TypeError):
-        from_shapely(shapely_polygon([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]))
+        to_shapely(Dummy())  # type: ignore[arg-type]
