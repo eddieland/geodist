@@ -9,15 +9,32 @@ from pathlib import Path
 import tomllib
 
 
+def discover_repo_root() -> Path:
+    workspace = os.environ.get("GITHUB_WORKSPACE")
+    if workspace:
+        return Path(workspace).resolve()
+    return Path(__file__).resolve().parents[2]
+
+
 def main() -> int:
     release_version = os.environ.get("RELEASE_VERSION")
     if not release_version:
         sys.stderr.write("RELEASE_VERSION must be set.\n")
         return 1
 
-    repo_root = Path(__file__).resolve().parent.parent
-    cargo_version = tomllib.loads((repo_root / "geodist-rs/Cargo.toml").read_text())["package"]["version"]
-    py_version = tomllib.loads((repo_root / "pygeodist/pyproject.toml").read_text())["project"]["version"]
+    repo_root = discover_repo_root()
+    manifest_cargo = repo_root / "geodist-rs" / "Cargo.toml"
+    manifest_py = repo_root / "pygeodist" / "pyproject.toml"
+
+    if not manifest_cargo.exists():
+        sys.stderr.write(f"Missing Cargo manifest: {manifest_cargo}\n")
+        return 1
+    if not manifest_py.exists():
+        sys.stderr.write(f"Missing Python manifest: {manifest_py}\n")
+        return 1
+
+    cargo_version = tomllib.loads(manifest_cargo.read_text())["package"]["version"]
+    py_version = tomllib.loads(manifest_py.read_text())["project"]["version"]
 
     errors: list[str] = []
     if cargo_version != release_version:
