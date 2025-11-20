@@ -523,7 +523,7 @@ mod tests {
         name: "polar_cross",
         p1: (89.0, 0.0),
         p2: (85.0, 90.0),
-        distance_m: 569_487.910_026_2804,
+        distance_m: 569_487.910_026_280_4,
         initial_bearing_deg: 78.718_341_086_595_79,
         final_bearing_deg: 168.674_679_425_412_28,
       },

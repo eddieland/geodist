@@ -2,7 +2,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use geodist_rs::{
-  Ellipsoid, Geographiclib, GeodesicAlgorithm, Point, geodesic_distance, geodesic_distance_on_ellipsoid,
+  Ellipsoid, GeodesicAlgorithm, Geographiclib, Point, geodesic_distance, geodesic_distance_on_ellipsoid,
   geodesic_distances, hausdorff,
 };
 

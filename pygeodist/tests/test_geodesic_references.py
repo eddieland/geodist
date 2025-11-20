@@ -1,15 +1,11 @@
-from __future__ import annotations
-
 """GeographicLib reference fixtures for ellipsoidal geodesics on WGS84."""
 
-import importlib.util
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import pytest
 from pytest import approx
-
-if importlib.util.find_spec("geodist._geodist_rs") is None:
-    pytest.skip("Rust extension is not built; skipping distance checks.", allow_module_level=True)
 
 from geodist import Ellipsoid, Point, geodesic_distance_on_ellipsoid, geodesic_with_bearings_on_ellipsoid
 
