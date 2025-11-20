@@ -1,5 +1,0 @@
-warn = [
-  "clippy::unwrap_used",
-]
-
-allow-unwrap-in-tests = true
