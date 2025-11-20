@@ -1,7 +1,27 @@
+from __future__ import annotations
+
+import importlib.util
+
+import pytest
 from pytest import approx
+
+if importlib.util.find_spec("geodist._geodist_rs") is None:
+    pytest.skip("Rust extension is not built; skipping surface checks.", allow_module_level=True)
 
 import geodist
 
 
 def test_constant_reexported() -> None:
     assert geodist.EARTH_RADIUS_METERS == approx(6_371_008.8)
+
+
+def test_public_api_reflects_trimmed_surface() -> None:
+    assert geodist.__all__ == (
+        "CRSValidationError",
+        "EARTH_RADIUS_METERS",
+        "GeodistError",
+        "GeometryTypeError",
+        "InvalidGeometryError",
+        "KernelUnavailableError",
+        "VectorizationError",
+    )

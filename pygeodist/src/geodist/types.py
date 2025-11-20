@@ -1,31 +1,24 @@
-"""Shared typing primitives for the geodist Python bindings."""
+"""Geodesic typing primitives shared across geodist bindings.
+
+Angles are expressed in degrees and distances in meters to match the Rust kernels.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Mapping, Sequence, Sized
+LatitudeDegrees = float
+LongitudeDegrees = float
+Meters = float
 
-# Coordinate representations follow Shapely/pygeos conventions to ease interop.
-Coordinate = tuple[float, float]
-CoordinateSequence = Sequence[Coordinate]
+# Geographic point represented as (latitude_degrees, longitude_degrees).
+PointDegrees = tuple[LatitudeDegrees, LongitudeDegrees]
 
-# Opaque handle returned by the compiled Rust extension; must at least be Sized.
-GeometryHandle = Sized
-
-# Coordinate reference systems may be stored as EPSG integers or authority strings.
-CRSLike = int | str | None
-
-# Parsed GeoJSON objects are represented as mappings to keep them serializable.
-GeoJSONLike = Mapping[str, object]
-
-# Paths accepted by IO helpers.
-PathLike = str | Path
+# Bounding box encoded as (min_latitude, max_latitude, min_longitude, max_longitude).
+BoundingBoxDegrees = tuple[LatitudeDegrees, LatitudeDegrees, LongitudeDegrees, LongitudeDegrees]
 
 __all__ = (
-    "Coordinate",
-    "CoordinateSequence",
-    "CRSLike",
-    "GeoJSONLike",
-    "GeometryHandle",
-    "PathLike",
+    "BoundingBoxDegrees",
+    "LatitudeDegrees",
+    "LongitudeDegrees",
+    "Meters",
+    "PointDegrees",
 )
