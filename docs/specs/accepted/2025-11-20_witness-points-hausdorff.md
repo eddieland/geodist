@@ -1,5 +1,7 @@
 # Witness Points for Hausdorff (Rust + Python)
 
+**Status:** ✅ Done (witness reporting shipped across Rust + Python; perf benchmarking can follow separately)
+
 ## Purpose
 
 - Add witness point reporting to Hausdorff distances so callers can inspect which pair of points realizes the maximum distance in each direction.
@@ -30,10 +32,10 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Define Rust return structs/enums for witness output across 2D, 3D, and clipped Hausdorff | Chosen shape (e.g., `HausdorffWitness { distance_meters, a_idx, b_idx }`, symmetric returns both directions) documented with RustDoc | Decide whether symmetric returns two structs or a combined type; confirm index semantics post-clipping | 📝 |
-| P0 | Implement witness-capable kernels in Rust | All Hausdorff paths (directed/symmetric, clipped/unclipped, 3D) compute witness pair and return typed result; errors for empty/fully clipped sets; tests added | Keep indexed vs naive strategy; ensure clipped paths track source indices | 📝 |
-| P0 | Expose witness outputs through PyO3 and update `_geodist_rs.pyi` | PyO3 module exports new witness-returning functions/structs; stub updated; Python type hints align | Decide Python result type (frozen dataclass or NamedTuple); adjust existing helpers if that yields a better API | 📝 |
-| P1 | Add Python-side tests and docs | Pytest coverage for witness returns across variants; README + notebook mention how to access witnesses | Include negative cases (empty, fully clipped) and ensure indices match original iterable order | 📝 |
+| P0 | Define Rust return structs/enums for witness output across 2D, 3D, and clipped Hausdorff | Chosen shape (e.g., `HausdorffWitness { distance_meters, a_idx, b_idx }`, symmetric returns both directions) documented with RustDoc | Decide whether symmetric returns two structs or a combined type; confirm index semantics post-clipping | ✅ Done |
+| P0 | Implement witness-capable kernels in Rust | All Hausdorff paths (directed/symmetric, clipped/unclipped, 3D) compute witness pair and return typed result; errors for empty/fully clipped sets; tests added | Keep indexed vs naive strategy; ensure clipped paths track source indices | ✅ Done |
+| P0 | Expose witness outputs through PyO3 and update `_geodist_rs.pyi` | PyO3 module exports new witness-returning functions/structs; stub updated; Python type hints align | Decide Python result type (frozen dataclass or NamedTuple); adjust existing helpers if that yields a better API | ✅ Done |
+| P1 | Add Python-side tests and docs | Pytest coverage for witness returns across variants; README + notebook mention how to access witnesses | Include negative cases (empty, fully clipped) and ensure indices match original iterable order | ✅ Done |
 | P2 | Performance validation | Bench comparisons showing negligible overhead on small sets and acceptable overhead on large sets with indexing | Add micro-bench or reuse existing Criterion harness; document findings | 📝 |
 | P3 | Optional: expose witness point coordinates directly in Python convenience layer | Helper that maps indices back to `Point`/`Point3D` objects for ergonomic use | Only if not too costly; otherwise document how to reconstruct manually | ⏸️ |
 | P3 | Plan follow-up spec to extend witness reporting to other calculations | Draft scoped proposal reusing lessons from Hausdorff (e.g., bearing witnesses) | Keep scope separate to avoid blocking Hausdorff delivery | 📝 |
@@ -46,15 +48,16 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 
 ### Open Questions
 
-- Should symmetric witness results be a tuple of two directed results or a dedicated struct with `a_to_b` / `b_to_a` fields?
-- Do we return just indices or also the corresponding coordinates in Python for convenience?
-- For clipped variants, should we surface the post-clipping point coordinates alongside original indices to aid debugging?
+- Resolved: symmetric witness uses a dedicated struct with `a_to_b` / `b_to_a` fields.
+- Resolved: Python layer returns indices and distances; mapping back to coordinates lives at the caller level or a future convenience helper.
+- Resolved: Clipped variants report indices relative to the original (pre-clipping) iterable order.
 
-## Status Tracking (to be updated by subagent)
+## Status Tracking
 
-- **Latest completed task:** _None yet (new spec)._
-- **Next up:** _Lock in Rust return shape and index semantics for all variants._
+- **Latest completed task:** Rust/Python witness surfaces implemented with tests and docs.
+- **Overall spec state:** Done; optional benches can follow without API changes.
 
-## Lessons Learned (ongoing)
+## Lessons Learned
 
-- _TBD during implementation._
+- Carrying source indices through clipping and indexing keeps witness reporting reliable without inflating storage.
+- Returning typed witness structs (Rust) and dataclasses (Python) balances ergonomics with backward-compatibility expectations while still allowing distance-only access via field reads.

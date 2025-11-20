@@ -44,9 +44,9 @@ can be added later if needed; clipping still uses latitude/longitude bounds.
 - Great-circle distance on a spherical Earth (WGS84 mean radius by default) plus custom radius/ellipsoid helpers.
 - Batch distance calculation for many point pairs.
 - Initial/final bearing output that reuses the distance kernel.
-- Directed and symmetric Hausdorff distance over point sets, with bounding-box-clipped variants and an automatic switch between an `rstar` index and an O(n*m) fallback for tiny inputs.
-- 3D straight-line distances and Hausdorff evaluation over altitude-bearing point sets, reusing the same validation and clipping semantics (clip on lat/lon).
-- Python bindings expose a Rust-backed `Point` and `BoundingBox` along with `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff helpers. Imports stay guarded so Shapely interop remains optional.
+- Directed and symmetric Hausdorff distance over point sets with witness reporting (distance + realizing indices), with bounding-box-clipped variants and an automatic switch between an `rstar` index and an O(n*m) fallback for tiny inputs.
+- 3D straight-line distances and Hausdorff evaluation over altitude-bearing point sets (with witnesses), reusing the same validation and clipping semantics (clip on lat/lon).
+- Python bindings expose Rust-backed geometry handles along with `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff helpers that return typed witness records. Imports stay guarded so Shapely interop remains optional.
 
 ## Roadmap highlights
 
@@ -58,7 +58,7 @@ can be added later if needed; clipping still uses latitude/longitude bounds.
 ## Rust quickstart
 
 ```rust
-use geodist_rs::{Point, geodesic_distance, geodesic_with_bearings, hausdorff};
+use geodist_rs::{HausdorffDirectedWitness, Point, geodesic_distance, geodesic_with_bearings, hausdorff};
 
 let origin = Point::new(40.7128, -74.0060)?;
 let destination = Point::new(51.5074, -0.1278)?;
@@ -68,7 +68,9 @@ let bearings = geodesic_with_bearings(origin, destination)?;
 
 let path_a = [origin, Point::new(40.0, -73.5)?];
 let path_b = [destination, Point::new(51.0, -0.2)?];
-let hausdorff_meters = hausdorff(&path_a, &path_b)?.meters();
+let hausdorff_witness = hausdorff(&path_a, &path_b)?;
+let hausdorff_meters = hausdorff_witness.distance().meters();
+let HausdorffDirectedWitness { origin_index, candidate_index, .. } = hausdorff_witness.a_to_b();
 ```
 
 While the API stabilizes, use the crate from this workspace or add it as a path
@@ -97,8 +99,8 @@ east = Point(0.0, 1.0)
 result = geodesic_with_bearings(origin, east)
 print(result.distance_meters, result.initial_bearing_degrees, result.final_bearing_degrees)
 
-distance = hausdorff([origin], [east])
-print(distance)
+witness = hausdorff([origin], [east])
+print(witness.distance_meters, witness.a_to_b.origin_index, witness.a_to_b.candidate_index)
 ```
 
 ## Shapely interoperability

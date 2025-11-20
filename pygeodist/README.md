@@ -13,9 +13,9 @@ Python bindings for `geodist`. The Python package exposes the
 
 ## API scope and non-goals
 
-- Public exports today: `EARTH_RADIUS_METERS`, `GeodistError`, `InvalidGeometryError`, `Point`, `BoundingBox`, `GeodesicResult`, `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff (directed + clipped) helpers returning meters.
+- Public exports today: `EARTH_RADIUS_METERS`, `GeodistError`, `InvalidGeometryError`, `Point`, `BoundingBox`, `GeodesicResult`, `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff (directed + clipped) helpers returning witness records (distance + realizing indices).
 - Non-goals: mirroring Shapely's API, accepting free-form geometry tuples, or silently coercing unsupported shapes.
-- Future Python surface (gated on Rust kernels, no promised timeline): witness point reporting, additional geometry wrappers, and vectorized helpers once Rust exposes them.
+- Future Python surface (gated on Rust kernels, no promised timeline): additional geometry wrappers and vectorized helpers once Rust exposes them.
 - The Typer CLI (`uv run geodist info`) is a dev-only helper to confirm the extension loads.
 
 ## Shapely interoperability

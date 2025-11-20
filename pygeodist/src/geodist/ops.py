@@ -12,6 +12,8 @@ from .types import Meters
 
 __all__ = (
     "GeodesicResult",
+    "HausdorffDirectedWitness",
+    "HausdorffWitness",
     "geodesic_distance",
     "geodesic_distance_3d",
     "geodesic_with_bearings",
@@ -33,6 +35,24 @@ class GeodesicResult:
     distance_meters: Meters
     initial_bearing_degrees: float
     final_bearing_degrees: float
+
+
+@dataclass(frozen=True)
+class HausdorffDirectedWitness:
+    """Directed Hausdorff witness containing the realizing pair indices."""
+
+    distance_meters: Meters
+    origin_index: int
+    candidate_index: int
+
+
+@dataclass(frozen=True)
+class HausdorffWitness:
+    """Symmetric Hausdorff witness with per-direction details."""
+
+    distance_meters: Meters
+    a_to_b: HausdorffDirectedWitness
+    b_to_a: HausdorffDirectedWitness
 
 
 def geodesic_distance(origin: Point, destination: Point) -> Meters:
@@ -65,91 +85,163 @@ def geodesic_with_bearings(origin: Point, destination: Point) -> GeodesicResult:
     )
 
 
-def hausdorff_directed(a: Iterable[Point], b: Iterable[Point]) -> Meters:
-    """Directed Hausdorff distance from set `a` to set `b`."""
+def hausdorff_directed(a: Iterable[Point], b: Iterable[Point]) -> HausdorffDirectedWitness:
+    """Directed Hausdorff distance and witness from set `a` to set `b`."""
     try:
-        return float(_geodist_rs.hausdorff_directed([it._handle for it in a], [it._handle for it in b]))
+        witness = _geodist_rs.hausdorff_directed([it._handle for it in a], [it._handle for it in b])
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
 
+    return HausdorffDirectedWitness(
+        distance_meters=float(witness.distance_meters),
+        origin_index=int(witness.origin_index),
+        candidate_index=int(witness.candidate_index),
+    )
 
-def hausdorff(a: Iterable[Point], b: Iterable[Point]) -> Meters:
-    """Symmetric Hausdorff distance between two point sets."""
+
+def hausdorff(a: Iterable[Point], b: Iterable[Point]) -> HausdorffWitness:
+    """Symmetric Hausdorff distance and witnesses between two point sets."""
     try:
-        return float(_geodist_rs.hausdorff([it._handle for it in a], [it._handle for it in b]))
+        witness = _geodist_rs.hausdorff([it._handle for it in a], [it._handle for it in b])
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
+
+    return HausdorffWitness(
+        distance_meters=float(witness.distance_meters),
+        a_to_b=HausdorffDirectedWitness(
+            distance_meters=float(witness.a_to_b.distance_meters),
+            origin_index=int(witness.a_to_b.origin_index),
+            candidate_index=int(witness.a_to_b.candidate_index),
+        ),
+        b_to_a=HausdorffDirectedWitness(
+            distance_meters=float(witness.b_to_a.distance_meters),
+            origin_index=int(witness.b_to_a.origin_index),
+            candidate_index=int(witness.b_to_a.candidate_index),
+        ),
+    )
 
 
 def hausdorff_directed_clipped(
     a: Iterable[Point],
     b: Iterable[Point],
     bounding_box: BoundingBox,
-) -> Meters:
-    """Directed Hausdorff distance after clipping both sets to a bounding box."""
+) -> HausdorffDirectedWitness:
+    """Directed Hausdorff witness after clipping both sets to a bounding box."""
     try:
-        return float(
-            _geodist_rs.hausdorff_directed_clipped(
-                [it._handle for it in a], [it._handle for it in b], bounding_box._handle
-            )
+        witness = _geodist_rs.hausdorff_directed_clipped(
+            [it._handle for it in a], [it._handle for it in b], bounding_box._handle
         )
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
 
+    return HausdorffDirectedWitness(
+        distance_meters=float(witness.distance_meters),
+        origin_index=int(witness.origin_index),
+        candidate_index=int(witness.candidate_index),
+    )
 
-def hausdorff_clipped(a: Iterable[Point], b: Iterable[Point], bounding_box: BoundingBox) -> Meters:
-    """Symmetric Hausdorff distance after clipping both sets to a bounding box."""
+
+def hausdorff_clipped(a: Iterable[Point], b: Iterable[Point], bounding_box: BoundingBox) -> HausdorffWitness:
+    """Symmetric Hausdorff witness after clipping both sets to a bounding box."""
     try:
-        return float(
-            _geodist_rs.hausdorff_clipped([it._handle for it in a], [it._handle for it in b], bounding_box._handle)
-        )
+        witness = _geodist_rs.hausdorff_clipped([it._handle for it in a], [it._handle for it in b], bounding_box._handle)
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
 
+    return HausdorffWitness(
+        distance_meters=float(witness.distance_meters),
+        a_to_b=HausdorffDirectedWitness(
+            distance_meters=float(witness.a_to_b.distance_meters),
+            origin_index=int(witness.a_to_b.origin_index),
+            candidate_index=int(witness.a_to_b.candidate_index),
+        ),
+        b_to_a=HausdorffDirectedWitness(
+            distance_meters=float(witness.b_to_a.distance_meters),
+            origin_index=int(witness.b_to_a.origin_index),
+            candidate_index=int(witness.b_to_a.candidate_index),
+        ),
+    )
 
-def hausdorff_directed_3d(a: Iterable[Point3D], b: Iterable[Point3D]) -> Meters:
-    """Directed 3D Hausdorff distance using the ECEF chord metric."""
+
+def hausdorff_directed_3d(a: Iterable[Point3D], b: Iterable[Point3D]) -> HausdorffDirectedWitness:
+    """Directed 3D Hausdorff witness using the ECEF chord metric."""
     try:
-        return float(_geodist_rs.hausdorff_directed_3d([it._handle for it in a], [it._handle for it in b]))
+        witness = _geodist_rs.hausdorff_directed_3d([it._handle for it in a], [it._handle for it in b])
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
 
+    return HausdorffDirectedWitness(
+        distance_meters=float(witness.distance_meters),
+        origin_index=int(witness.origin_index),
+        candidate_index=int(witness.candidate_index),
+    )
 
-def hausdorff_3d(a: Iterable[Point3D], b: Iterable[Point3D]) -> Meters:
-    """Symmetric 3D Hausdorff distance using the ECEF chord metric."""
+
+def hausdorff_3d(a: Iterable[Point3D], b: Iterable[Point3D]) -> HausdorffWitness:
+    """Symmetric 3D Hausdorff witness using the ECEF chord metric."""
     try:
-        return float(_geodist_rs.hausdorff_3d([it._handle for it in a], [it._handle for it in b]))
+        witness = _geodist_rs.hausdorff_3d([it._handle for it in a], [it._handle for it in b])
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
+
+    return HausdorffWitness(
+        distance_meters=float(witness.distance_meters),
+        a_to_b=HausdorffDirectedWitness(
+            distance_meters=float(witness.a_to_b.distance_meters),
+            origin_index=int(witness.a_to_b.origin_index),
+            candidate_index=int(witness.a_to_b.candidate_index),
+        ),
+        b_to_a=HausdorffDirectedWitness(
+            distance_meters=float(witness.b_to_a.distance_meters),
+            origin_index=int(witness.b_to_a.origin_index),
+            candidate_index=int(witness.b_to_a.candidate_index),
+        ),
+    )
 
 
 def hausdorff_directed_clipped_3d(
     a: Iterable[Point3D],
     b: Iterable[Point3D],
     bounding_box: BoundingBox,
-) -> Meters:
-    """Directed 3D Hausdorff distance after clipping points by latitude/longitude."""
+) -> HausdorffDirectedWitness:
+    """Directed 3D Hausdorff witness after clipping points by latitude/longitude."""
     try:
-        return float(
-            _geodist_rs.hausdorff_directed_clipped_3d(
-                [it._handle for it in a],
-                [it._handle for it in b],
-                bounding_box._handle,
-            )
+        witness = _geodist_rs.hausdorff_directed_clipped_3d(
+            [it._handle for it in a],
+            [it._handle for it in b],
+            bounding_box._handle,
         )
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
 
+    return HausdorffDirectedWitness(
+        distance_meters=float(witness.distance_meters),
+        origin_index=int(witness.origin_index),
+        candidate_index=int(witness.candidate_index),
+    )
 
-def hausdorff_clipped_3d(a: Iterable[Point3D], b: Iterable[Point3D], bounding_box: BoundingBox) -> Meters:
-    """Symmetric 3D Hausdorff distance after clipping points by latitude/longitude."""
+
+def hausdorff_clipped_3d(a: Iterable[Point3D], b: Iterable[Point3D], bounding_box: BoundingBox) -> HausdorffWitness:
+    """Symmetric 3D Hausdorff witness after clipping points by latitude/longitude."""
     try:
-        return float(
-            _geodist_rs.hausdorff_clipped_3d(
-                [it._handle for it in a],
-                [it._handle for it in b],
-                bounding_box._handle,
-            )
+        witness = _geodist_rs.hausdorff_clipped_3d(
+            [it._handle for it in a],
+            [it._handle for it in b],
+            bounding_box._handle,
         )
     except ValueError as exc:
         raise GeodistError(str(exc)) from exc
+
+    return HausdorffWitness(
+        distance_meters=float(witness.distance_meters),
+        a_to_b=HausdorffDirectedWitness(
+            distance_meters=float(witness.a_to_b.distance_meters),
+            origin_index=int(witness.a_to_b.origin_index),
+            candidate_index=int(witness.a_to_b.candidate_index),
+        ),
+        b_to_a=HausdorffDirectedWitness(
+            distance_meters=float(witness.b_to_a.distance_meters),
+            origin_index=int(witness.b_to_a.origin_index),
+            candidate_index=int(witness.b_to_a.candidate_index),
+        ),
+    )
