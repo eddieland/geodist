@@ -14,10 +14,6 @@ the Rust surface settles.
   projection quirks.
 - **Ellipsoidal geodesic:** Same idea on a chosen ellipsoid when you need
   tighter agreement with geodesy references or region-specific spheroids.
-- **3D note:** When 3D support arrives, the default will be a straight-line
-  chord in ECEF (altitude-aware, “as-the-crow-flies” through space). Surface
-  arc with altitude adjustment can be added later if needed. Today, only 2D
-  types/algorithms are exposed.
 - **Bearings (initial/final):** Direction of travel at the start and end of a
   geodesic. Handy for navigation cues, route snapping, or aligning segment
   splits downstream.
@@ -26,6 +22,11 @@ the Rust surface settles.
   asks “how far apart are these shapes overall?”
 - **Bounding-box-clipped variants:** Restrict Hausdorff evaluation to a region
   to ignore distant outliers and focus on the area of interest.
+
+Note on 3D: When 3D support arrives, the default will be a straight-line chord
+in ECEF (altitude-aware, “as-the-crow-flies” through space). Surface arc with
+altitude adjustment can be added later if needed. Today, only 2D
+types/algorithms are exposed.
 
 ## Crates & Packages
 
