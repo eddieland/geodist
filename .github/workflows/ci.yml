@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  # Temporarily disable main branch push builds until publishing is wired up.
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
