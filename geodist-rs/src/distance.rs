@@ -5,6 +5,31 @@
 use crate::algorithms::{GeodesicAlgorithm, Spherical};
 use crate::{Distance, Ellipsoid, GeodistError, Point, Point3D};
 
+/// Earth-Centered, Earth-Fixed (ECEF) Cartesian coordinate in meters.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct EcefPoint {
+  pub(crate) x: f64,
+  pub(crate) y: f64,
+  pub(crate) z: f64,
+}
+
+impl EcefPoint {
+  pub(crate) const fn new(x: f64, y: f64, z: f64) -> Self {
+    Self { x, y, z }
+  }
+
+  pub(crate) fn squared_distance_to(self, other: Self) -> f64 {
+    let dx = self.x - other.x;
+    let dy = self.y - other.y;
+    let dz = self.z - other.z;
+    dx * dx + dy * dy + dz * dz
+  }
+
+  pub(crate) fn distance_to(self, other: Self) -> f64 {
+    self.squared_distance_to(other).sqrt()
+  }
+}
+
 /// Distance plus forward and reverse bearings for a geodesic path.
 ///
 /// Bearings are measured clockwise from north in degrees and normalized to
@@ -124,14 +149,11 @@ pub fn geodesic_distance_3d_on_ellipsoid(
   p1: Point3D,
   p2: Point3D,
 ) -> Result<Distance, GeodistError> {
+  ellipsoid.validate()?;
   let ecef1 = geodetic_to_ecef(p1, &ellipsoid)?;
   let ecef2 = geodetic_to_ecef(p2, &ellipsoid)?;
 
-  let dx = ecef1.0 - ecef2.0;
-  let dy = ecef1.1 - ecef2.1;
-  let dz = ecef1.2 - ecef2.2;
-  let meters = (dx * dx + dy * dy + dz * dz).sqrt();
-
+  let meters = ecef1.distance_to(ecef2);
   Distance::from_meters(meters)
 }
 
@@ -264,9 +286,8 @@ fn normalize_bearing(mut degrees: f64) -> f64 {
   degrees
 }
 
-fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<(f64, f64, f64), GeodistError> {
+pub(crate) fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<EcefPoint, GeodistError> {
   point.validate()?;
-  ellipsoid.validate()?;
 
   let a = ellipsoid.semi_major_axis_m;
   let b = ellipsoid.semi_minor_axis_m;
@@ -286,7 +307,7 @@ fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<(f64, f64, 
   let y = (surface_normal_radius + altitude) * cos_lat * sin_lon;
   let z = ((1.0 - eccentricity_squared) * surface_normal_radius + altitude) * sin_lat;
 
-  Ok((x, y, z))
+  Ok(EcefPoint::new(x, y, z))
 }
 
 #[cfg(test)]
