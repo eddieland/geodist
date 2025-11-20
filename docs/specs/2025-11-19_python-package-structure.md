@@ -34,7 +34,7 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 | -------- | ---- | ------------------ | ----- | ------ |
 | P0 | Rewrite public API scope doc and `__all__` to reflect the minimal surface (constants, errors, Rust-backed geometry wrappers). | README and docstrings describe the small API; no promises of Shapely breadth. | Aligns consumer expectations with reality. | ✅ |
 | P0 | Define Rust-backed geometry wrappers and constructors. | `_geodist_rs.pyi` exposes core structs; Python wrappers validate inputs and keep immutability; no Shapely dependency. | Keeps typing ready while matching Rust models. | ✅ |
-| P1 | Ship optional Shapely conversion helpers and verify packaging/CLI alignment. | `interop_shapely.py` converts to/from wrappers (guarded imports, skipped tests when missing); packaging keeps deps lean; CLI reflects the limited API. | Bundles small tasks to avoid churn. | 📝 |
+| P1 | Ship optional Shapely conversion helpers and verify packaging/CLI alignment. | `interop_shapely.py` converts to/from wrappers (guarded imports, skipped tests when missing); packaging keeps deps lean; CLI reflects the limited API. | Bundles small tasks to avoid churn. | ✅ |
 | P2 | Document non-goals and future kernel exposures without promising timelines. | README states Shapely parity is out of scope; guidance for interop users; backlog of candidate functions gated on Rust readiness. | Reduces support burden and avoids churn. | 📝 |
 
 _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
@@ -56,8 +56,8 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Added Rust-backed `Point` handle with Python wrapper validation and updated the stub/export surface._
-- **Next up:** _Ship optional Shapely conversion helpers and verify packaging/CLI alignment._
+- **Latest completed task:** _Added optional Shapely conversions (Point-only), wired optional extra, and surfaced status via the CLI._
+- **Next up:** _Document non-goals and future kernel exposures without promising timelines._
 
 ## Lessons Learned (ongoing)
 
@@ -67,3 +67,4 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 - _Guard extension imports and fail loudly but politely when kernels are absent._
 - _Interop helpers must be explicit and optional to avoid dragging in heavy dependencies by default._
 - _Validate coordinate ranges in Python before constructing Rust handles to keep the extension surface minimal._
+- _Guard optional dependencies both at import time and in tests so the dev workflow stays predictable even without optional extras._

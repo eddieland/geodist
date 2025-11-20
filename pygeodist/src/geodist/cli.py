@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import importlib.util
 
 try:
     import typer
@@ -30,12 +31,18 @@ def _extension_status() -> tuple[float | None, str | None]:
     return float(EARTH_RADIUS_METERS), None
 
 
+def _interop_status() -> str:
+    """Return a short status string for optional Shapely helpers."""
+    return "available" if importlib.util.find_spec("shapely.geometry") else "not installed"
+
+
 @app.command()
 def info() -> None:
     """Show package version and whether the Rust extension is importable."""
     version = importlib.metadata.version("pygeodist")
     radius_meters, error = _extension_status()
     typer.echo(f"pygeodist version: {version}")
+    typer.echo(f"Shapely interop helpers: {_interop_status()}")
     if radius_meters is None:
         typer.echo("Extension: not loaded")
         typer.echo(f"Import error: {error}")
