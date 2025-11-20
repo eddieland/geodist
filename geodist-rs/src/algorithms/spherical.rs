@@ -5,7 +5,10 @@
 use super::GeodesicAlgorithm;
 use crate::{Distance, EARTH_RADIUS_METERS, Ellipsoid, GeodistError, Point};
 
-/// Baseline spherical algorithm.
+/// Baseline spherical algorithm using a haversine great-circle model.
+///
+/// The default configuration uses the WGS84 mean radius and validates inputs
+/// before computing a meter distance.
 #[derive(Debug, Clone, Copy)]
 pub struct Spherical {
   radius_meters: f64,
@@ -21,6 +24,11 @@ impl Default for Spherical {
 
 impl Spherical {
   /// Construct a spherical strategy with a custom radius.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`GeodistError::InvalidRadius`] if the provided radius is NaN,
+  /// infinite, or non-positive.
   pub fn with_radius(radius_meters: f64) -> Result<Self, GeodistError> {
     if !radius_meters.is_finite() || radius_meters <= 0.0 {
       return Err(GeodistError::InvalidRadius(radius_meters));
@@ -29,6 +37,11 @@ impl Spherical {
   }
 
   /// Construct a spherical strategy using the mean radius of an ellipsoid.
+  ///
+  /// # Errors
+  ///
+  /// Propagates [`GeodistError::InvalidEllipsoid`] if the ellipsoid axes are
+  /// not finite, positive, and ordered.
   pub fn from_ellipsoid(ellipsoid: Ellipsoid) -> Result<Self, GeodistError> {
     let radius_meters = ellipsoid.mean_radius()?;
     Self::with_radius(radius_meters)
@@ -46,6 +59,15 @@ impl GeodesicAlgorithm for Spherical {
   }
 }
 
+/// Compute spherical great-circle distance for a single pair.
+///
+/// Inputs are degrees and validated before calculating the haversine arc
+/// length. Returns a [`Distance`] in meters based on the provided radius.
+///
+/// # Errors
+///
+/// Returns [`GeodistError`] if either point is invalid or if the meter value
+/// cannot be expressed as a valid [`Distance`].
 pub(crate) fn spherical_distance(radius_meters: f64, p1: Point, p2: Point) -> Result<Distance, GeodistError> {
   p1.validate()?;
   p2.validate()?;
