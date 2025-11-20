@@ -305,6 +305,13 @@ jobs:
         working-directory: pygeodist
         run: uv sync --all-extras --dev
 
+      - name: Clean built extension artifacts
+        shell: bash
+        working-directory: pygeodist
+        run: |
+          set -euo pipefail
+          rm -f src/geodist/_geodist_rs*.{so,pyd,dll,dylib}
+
       - name: Build wheel
         shell: bash
         working-directory: pygeodist
