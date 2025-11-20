@@ -28,10 +28,13 @@ jobs:
       - name: Register problem matchers
         run: echo "::add-matcher::${GITHUB_WORKSPACE}/.github/matchers/mypy.json"
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
 
       - name: Determine uv cache directory
         id: uv-cache-dir
@@ -84,7 +87,7 @@ jobs:
         with:
           report_paths: pygeodist/.test-results/pytest-*.xml
           check_name: "pytest (${{ matrix.python-version }})"
-          fail_on_error: false
+          fail_on_failure: false
           annotate_only: true
 
   rust:
