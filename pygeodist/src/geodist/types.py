@@ -5,25 +5,25 @@ Angles are expressed in degrees and distances in meters to match the Rust kernel
 
 from __future__ import annotations
 
-LatitudeDeg = float
-LongitudeDeg = float
+Latitude = float
+Longitude = float
 Meters = float
 AltitudeM = float
 
-# Geographic point represented as (lat_deg, lon_deg).
-PointDeg = tuple[LatitudeDeg, LongitudeDeg]
-# Geographic point represented as (lat_deg, lon_deg, altitude_m).
-Point3DDeg = tuple[LatitudeDeg, LongitudeDeg, AltitudeM]
+# Geographic point represented as (lat, lon) in degrees.
+Point = tuple[Latitude, Longitude]
+# Geographic point represented as (lat, lon, altitude_m) in degrees/meters.
+Point3D = tuple[Latitude, Longitude, AltitudeM]
 
-# Bounding box encoded as (min_lat_deg, max_lat_deg, min_lon_deg, max_lon_deg).
-BoundingBoxDeg = tuple[LatitudeDeg, LatitudeDeg, LongitudeDeg, LongitudeDeg]
+# Bounding box encoded as (min_lat, max_lat, min_lon, max_lon), degrees.
+BoundingBox = tuple[Latitude, Latitude, Longitude, Longitude]
 
 __all__ = (
-    "AltitudeM",
-    "LatitudeDeg",
-    "LongitudeDeg",
-    "Meters",
-    "PointDeg",
-    "Point3DDeg",
-    "BoundingBoxDeg",
+  "AltitudeM",
+  "Latitude",
+  "Longitude",
+  "Meters",
+  "Point",
+  "Point3D",
+  "BoundingBox",
 )

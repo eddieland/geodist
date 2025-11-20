@@ -216,10 +216,10 @@ fn geodesic_with_bearings_inner(radius_meters: f64, p1: Point, p2: Point) -> Res
   p1.validate()?;
   p2.validate()?;
 
-  let lat1 = p1.lat_deg.to_radians();
-  let lat2 = p2.lat_deg.to_radians();
-  let delta_lat = (p2.lat_deg - p1.lat_deg).to_radians();
-  let delta_lon = (p2.lon_deg - p1.lon_deg).to_radians();
+  let lat1 = p1.lat.to_radians();
+  let lat2 = p2.lat.to_radians();
+  let delta_lat = (p2.lat - p1.lat).to_radians();
+  let delta_lon = (p2.lon - p1.lon).to_radians();
 
   let sin_lat = (delta_lat / 2.0).sin();
   let sin_lon = (delta_lon / 2.0).sin();
@@ -272,8 +272,8 @@ fn geodetic_to_ecef(point: Point3D, ellipsoid: &Ellipsoid) -> Result<(f64, f64, 
   let b = ellipsoid.semi_minor_axis_m;
   let eccentricity_squared = 1.0 - (b * b) / (a * a);
 
-  let lat = point.lat_deg.to_radians();
-  let lon = point.lon_deg.to_radians();
+  let lat = point.lat.to_radians();
+  let lon = point.lon.to_radians();
   let sin_lat = lat.sin();
   let cos_lat = lat.cos();
   let sin_lon = lon.sin();
@@ -350,10 +350,7 @@ mod tests {
   #[test]
   fn propagates_validation_error() {
     let valid = Point::new(0.0, 0.0).unwrap();
-    let invalid = Point {
-      lat_deg: 95.0,
-      lon_deg: 0.0,
-    };
+    let invalid = Point { lat: 95.0, lon: 0.0 };
     let pairs = [(valid, valid), (invalid, valid)];
 
     let result = geodesic_distances(&pairs);
@@ -454,8 +451,8 @@ mod tests {
   #[test]
   fn geodesic_distance_3d_rejects_invalid_altitude() {
     let nan_point = Point3D {
-      lat_deg: 0.0,
-      lon_deg: 0.0,
+      lat: 0.0,
+      lon: 0.0,
       altitude_m: f64::NAN,
     };
     let valid = Point3D::new(0.0, 0.0, 0.0).unwrap();

@@ -33,10 +33,10 @@ pub enum GeodistError {
   /// Bounding boxes must have ordered corners within valid latitude/longitude
   /// ranges.
   InvalidBoundingBox {
-    min_lat_deg: f64,
-    max_lat_deg: f64,
-    min_lon_deg: f64,
-    max_lon_deg: f64,
+    min_lat: f64,
+    max_lat: f64,
+    min_lon: f64,
+    max_lon: f64,
   },
   /// Point sets must be non-empty for Hausdorff distance.
   EmptyPointSet,
@@ -59,13 +59,13 @@ impl fmt::Display for GeodistError {
         "invalid ellipsoid axes a={semi_major}, b={semi_minor}; expected finite meters with a >= b > 0"
       ),
       Self::InvalidBoundingBox {
-        min_lat_deg,
-        max_lat_deg,
-        min_lon_deg,
-        max_lon_deg,
+        min_lat,
+        max_lat,
+        min_lon,
+        max_lon,
       } => write!(
         f,
-        "invalid bounding box [{min_lat_deg}, {max_lat_deg}] x [{min_lon_deg}, {max_lon_deg}]; expected ordered finite degrees"
+        "invalid bounding box [{min_lat}, {max_lat}] x [{min_lon}, {max_lon}]; expected ordered finite degrees"
       ),
       Self::EmptyPointSet => write!(f, "point sets must be non-empty"),
     }
@@ -82,9 +82,9 @@ impl std::error::Error for GeodistError {}
 #[repr(C)]
 pub struct Point {
   /// Latitude in degrees, expected in `[-90.0, 90.0]`.
-  pub lat_deg: f64,
+  pub lat: f64,
   /// Longitude in degrees, expected in `[-180.0, 180.0]`.
-  pub lon_deg: f64,
+  pub lon: f64,
 }
 
 impl Point {
@@ -95,19 +95,19 @@ impl Point {
   /// Returns [`GeodistError::InvalidLatitude`] or
   /// [`GeodistError::InvalidLongitude`] when a coordinate is out of range or
   /// non-finite.
-  pub fn new(lat_deg: f64, lon_deg: f64) -> Result<Self, GeodistError> {
-    validate_latitude(lat_deg)?;
-    validate_longitude(lon_deg)?;
-    Ok(Self { lat_deg, lon_deg })
+  pub fn new(lat: f64, lon: f64) -> Result<Self, GeodistError> {
+    validate_latitude(lat)?;
+    validate_longitude(lon)?;
+    Ok(Self { lat, lon })
   }
 
   /// Construct a point without performing validation.
   ///
-  /// Caller is responsible for ensuring `lat_deg` is in `[-90.0, 90.0]`,
-  /// `lon_deg` is in `[-180.0, 180.0]`, and both are finite. Invalid inputs
+  /// Caller is responsible for ensuring `lat` is in `[-90.0, 90.0]`,
+  /// `lon` is in `[-180.0, 180.0]`, and both are finite. Invalid inputs
   /// skip validation and may yield incorrect downstream calculations.
-  pub const fn new_unchecked(lat_deg: f64, lon_deg: f64) -> Self {
-    Self { lat_deg, lon_deg }
+  pub const fn new_unchecked(lat: f64, lon: f64) -> Self {
+    Self { lat, lon }
   }
 
   /// Validate the current point's coordinates.
@@ -115,8 +115,8 @@ impl Point {
   /// Use this when a point was constructed externally (e.g., via FFI) and
   /// should be checked before use.
   pub fn validate(&self) -> Result<(), GeodistError> {
-    validate_latitude(self.lat_deg)?;
-    validate_longitude(self.lon_deg)?;
+    validate_latitude(self.lat)?;
+    validate_longitude(self.lon)?;
     Ok(())
   }
 }
@@ -126,9 +126,9 @@ impl Point {
 #[repr(C)]
 pub struct Point3D {
   /// Latitude in degrees, expected in `[-90.0, 90.0]`.
-  pub lat_deg: f64,
+  pub lat: f64,
   /// Longitude in degrees, expected in `[-180.0, 180.0]`.
-  pub lon_deg: f64,
+  pub lon: f64,
   /// Altitude in meters relative to the reference ellipsoid; must be finite.
   pub altitude_m: f64,
 }
@@ -140,15 +140,11 @@ impl Point3D {
   /// # Errors
   ///
   /// Returns [`GeodistError`] when any component is out of range or non-finite.
-  pub fn new(lat_deg: f64, lon_deg: f64, altitude_m: f64) -> Result<Self, GeodistError> {
-    validate_latitude(lat_deg)?;
-    validate_longitude(lon_deg)?;
+  pub fn new(lat: f64, lon: f64, altitude_m: f64) -> Result<Self, GeodistError> {
+    validate_latitude(lat)?;
+    validate_longitude(lon)?;
     validate_altitude(altitude_m)?;
-    Ok(Self {
-      lat_deg,
-      lon_deg,
-      altitude_m,
-    })
+    Ok(Self { lat, lon, altitude_m })
   }
 
   /// Construct a 3D point without performing validation.
@@ -156,20 +152,16 @@ impl Point3D {
   /// Caller must ensure latitude/longitude follow the same constraints as
   /// [`Point`] and altitude is finite. Invalid inputs skip validation and may
   /// lead to incorrect downstream calculations.
-  pub const fn new_unchecked(lat_deg: f64, lon_deg: f64, altitude_m: f64) -> Self {
-    Self {
-      lat_deg,
-      lon_deg,
-      altitude_m,
-    }
+  pub const fn new_unchecked(lat: f64, lon: f64, altitude_m: f64) -> Self {
+    Self { lat, lon, altitude_m }
   }
 
   /// Validate the current point's coordinates and altitude.
   ///
   /// Use this to verify externally-constructed points (e.g., from FFI).
   pub fn validate(&self) -> Result<(), GeodistError> {
-    validate_latitude(self.lat_deg)?;
-    validate_longitude(self.lon_deg)?;
+    validate_latitude(self.lat)?;
+    validate_longitude(self.lon)?;
     validate_altitude(self.altitude_m)?;
     Ok(())
   }
@@ -261,46 +253,43 @@ impl Ellipsoid {
 #[repr(C)]
 pub struct BoundingBox {
   /// Minimum latitude in degrees.
-  pub min_lat_deg: f64,
+  pub min_lat: f64,
   /// Maximum latitude in degrees.
-  pub max_lat_deg: f64,
+  pub max_lat: f64,
   /// Minimum longitude in degrees.
-  pub min_lon_deg: f64,
+  pub min_lon: f64,
   /// Maximum longitude in degrees.
-  pub max_lon_deg: f64,
+  pub max_lon: f64,
 }
 
 impl BoundingBox {
   /// Construct a bounding box ensuring ordered corners inside valid ranges.
-  pub fn new(min_lat_deg: f64, max_lat_deg: f64, min_lon_deg: f64, max_lon_deg: f64) -> Result<Self, GeodistError> {
-    validate_latitude(min_lat_deg)?;
-    validate_latitude(max_lat_deg)?;
-    validate_longitude(min_lon_deg)?;
-    validate_longitude(max_lon_deg)?;
+  pub fn new(min_lat: f64, max_lat: f64, min_lon: f64, max_lon: f64) -> Result<Self, GeodistError> {
+    validate_latitude(min_lat)?;
+    validate_latitude(max_lat)?;
+    validate_longitude(min_lon)?;
+    validate_longitude(max_lon)?;
 
-    if min_lat_deg > max_lat_deg || min_lon_deg > max_lon_deg {
+    if min_lat > max_lat || min_lon > max_lon {
       return Err(GeodistError::InvalidBoundingBox {
-        min_lat_deg,
-        max_lat_deg,
-        min_lon_deg,
-        max_lon_deg,
+        min_lat,
+        max_lat,
+        min_lon,
+        max_lon,
       });
     }
 
     Ok(Self {
-      min_lat_deg,
-      max_lat_deg,
-      min_lon_deg,
-      max_lon_deg,
+      min_lat,
+      max_lat,
+      min_lon,
+      max_lon,
     })
   }
 
   /// Check whether a point lies inside the box (inclusive of edges).
   pub fn contains(&self, point: &Point) -> bool {
-    point.lat_deg >= self.min_lat_deg
-      && point.lat_deg <= self.max_lat_deg
-      && point.lon_deg >= self.min_lon_deg
-      && point.lon_deg <= self.max_lon_deg
+    point.lat >= self.min_lat && point.lat <= self.max_lat && point.lon >= self.min_lon && point.lon <= self.max_lon
   }
 }
 
@@ -361,8 +350,8 @@ mod tests {
   #[test]
   fn point_new_accepts_valid_bounds() {
     let p = Point::new(45.0, 120.0).unwrap();
-    assert_eq!(p.lat_deg, 45.0);
-    assert_eq!(p.lon_deg, 120.0);
+    assert_eq!(p.lat, 45.0);
+    assert_eq!(p.lon, 120.0);
   }
 
   #[test]
@@ -392,8 +381,8 @@ mod tests {
   #[test]
   fn point_new_unchecked_skips_validation() {
     let p = Point::new_unchecked(120.0, 200.0);
-    assert_eq!(p.lat_deg, 120.0);
-    assert_eq!(p.lon_deg, 200.0);
+    assert_eq!(p.lat, 120.0);
+    assert_eq!(p.lon, 200.0);
     assert!(p.validate().is_err());
   }
 
@@ -470,10 +459,10 @@ mod tests {
     assert!(matches!(
       result,
       Err(GeodistError::InvalidBoundingBox {
-        min_lat_deg: 1.0,
-        max_lat_deg: -1.0,
-        min_lon_deg: 0.0,
-        max_lon_deg: 1.0,
+        min_lat: 1.0,
+        max_lat: -1.0,
+        min_lon: 0.0,
+        max_lon: 1.0,
       })
     ));
   }

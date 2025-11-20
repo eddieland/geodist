@@ -9,18 +9,18 @@ from typing import Final
 EARTH_RADIUS_METERS: Final[float]
 
 class Point:
-    lat_deg: float
-    lon_deg: float
+    lat: float
+    lon: float
 
-    def __init__(self, lat_deg: float, lon_deg: float) -> None: ...
+    def __init__(self, lat: float, lon: float) -> None: ...
     def to_tuple(self) -> tuple[float, float]: ...
 
 class Point3D:
-    lat_deg: float
-    lon_deg: float
+    lat: float
+    lon: float
     altitude_m: float
 
-    def __init__(self, lat_deg: float, lon_deg: float, altitude_m: float) -> None: ...
+    def __init__(self, lat: float, lon: float, altitude_m: float) -> None: ...
     def to_tuple(self) -> tuple[float, float, float]: ...
 
 class GeodesicSolution:
@@ -31,17 +31,17 @@ class GeodesicSolution:
     def to_tuple(self) -> tuple[float, float, float]: ...
 
 class BoundingBox:
-    min_lat_deg: float
-    max_lat_deg: float
-    min_lon_deg: float
-    max_lon_deg: float
+    min_lat: float
+    max_lat: float
+    min_lon: float
+    max_lon: float
 
     def __init__(
         self,
-        min_lat_deg: float,
-        max_lat_deg: float,
-        min_lon_deg: float,
-        max_lon_deg: float,
+        min_lat: float,
+        max_lat: float,
+        min_lon: float,
+        max_lon: float,
     ) -> None: ...
     def to_tuple(self) -> tuple[float, float, float, float]: ...
 
