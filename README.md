@@ -101,6 +101,29 @@ distance = hausdorff([origin], [east])
 print(distance)
 ```
 
+## Shapely interoperability
+
+Shapely stays optional; install the extra when you need it:
+
+```bash
+pip install pygeodist[shapely]
+```
+
+Converters live in `geodist.ext.shapely` and keep imports guarded so you can
+depend on `geodist` without pulling Shapely everywhere:
+
+```python
+from geodist import Point
+from geodist.ext.shapely import from_shapely, to_shapely
+
+point = Point(12.5, -45.0)
+shapely_point = to_shapely(point)
+round_tripped = from_shapely(shapely_point)
+```
+
+Only 2D `Point` is supported today; 3D points and other geometry kinds raise
+`InvalidGeometryError` until the Rust kernels expose matching types.
+
 ## Why PyO3 / Maturin?
 
 - PyO3 exposes the Rust kernels directly to Python with predictable type conversions, Rust-side validation, and minimal glue code to keep the Python surface thin (vs CFFI/ctypes shims that tend to grow bespoke adapters).
