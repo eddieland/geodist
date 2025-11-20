@@ -1,0 +1,368 @@
+name: Release Publishing (dry-run default)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      publish_live:
+        description: "Upload to crates.io and PyPI (requires secrets and public repo)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  preflight:
+    name: Preflight checks
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.discover.outputs.version }}
+      live: ${{ steps.mode.outputs.live }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        id: discover
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow only runs from tags (got ${GITHUB_REF_TYPE})." >&2
+            exit 1
+          fi
+
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must look like vMAJOR.MINOR.PATCH (got ${tag})." >&2
+            exit 1
+          fi
+
+          echo "version=${tag#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check manifest versions match tag
+        env:
+          RELEASE_VERSION: ${{ steps.discover.outputs.version }}
+        run: |
+          python - <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+target = "${RELEASE_VERSION}"
+cargo_version = tomllib.loads(Path("geodist-rs/Cargo.toml").read_text())["package"]["version"]
+py_version = tomllib.loads(Path("pygeodist/pyproject.toml").read_text())["project"]["version"]
+
+errors = []
+if cargo_version != target:
+    errors.append(f"geodist-rs version {cargo_version} does not match tag {target}")
+if py_version != target:
+    errors.append(f"pygeodist version {py_version} does not match tag {target}")
+
+if errors:
+    sys.stderr.write("\n".join(errors) + "\n")
+    sys.exit(1)
+PY
+
+      - name: Resolve publish mode
+        id: mode
+        env:
+          DISPATCH_LIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_live || 'false' }}
+          VAR_LIVE: ${{ vars.PUBLISH_LIVE || 'false' }}
+        run: |
+          if [[ "${DISPATCH_LIVE}" == "true" || "${VAR_LIVE}" == "true" ]]; then
+            echo "live=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "live=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Block live publish on private repo
+        if: steps.mode.outputs.live == 'true'
+        env:
+          IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [[ "${IS_PRIVATE}" == "true" ]]; then
+            echo "Live publishing is disabled while the repository is private." >&2
+            exit 1
+          fi
+
+  validation:
+    name: Lint and test gates
+    runs-on: ubuntu-latest
+    needs: preflight
+    env:
+      RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      RUSTFLAGS: -D warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Register problem matchers
+        run: echo "::add-matcher::${GITHUB_WORKSPACE}/.github/matchers/mypy.json"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Determine uv cache directory
+        id: uv-cache-dir
+        run: echo "dir=$(uv cache dir)" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.uv-cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-uv-release-${{ hashFiles('pygeodist/pyproject.toml', 'pygeodist/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-release-
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt,rust-src,llvm-tools-preview
+
+      - name: Cache cargo build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "geodist-rs -> target"
+
+      - name: Sync Python dependencies
+        working-directory: pygeodist
+        run: uv sync --all-extras --dev
+
+      - name: Build Rust extension module
+        working-directory: pygeodist
+        run: uv run maturin develop
+
+      - name: Run lint
+        working-directory: pygeodist
+        env:
+          RUFF_OUTPUT_FORMAT: github
+          RUFF_CONFIG: ruff.toml
+        run: make lint
+
+      - name: Run tests
+        working-directory: pygeodist
+        env:
+          PYTEST_ADDOPTS: "--maxfail=1 --disable-warnings --junitxml=.test-results/pytest-release.xml"
+        run: |
+          mkdir -p .test-results
+          make test
+
+      - name: Cargo fmt
+        working-directory: geodist-rs
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        working-directory: geodist-rs
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Cargo test
+        working-directory: geodist-rs
+        run: cargo test --workspace
+
+  crate-package:
+    name: Cargo publish (dry-run)
+    runs-on: ubuntu-latest
+    needs: [preflight, validation]
+    env:
+      PUBLISH_LIVE: ${{ needs.preflight.outputs.live }}
+      RUSTFLAGS: -D warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt,rust-src,llvm-tools-preview
+
+      - name: Cache cargo build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "geodist-rs -> target"
+
+      - name: Cargo publish dry-run
+        working-directory: geodist-rs
+        run: cargo publish --locked --dry-run
+
+      - name: Upload crate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geodist-rs-crate
+          path: geodist-rs/target/package/*.crate
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Check crates.io token
+        if: env.PUBLISH_LIVE == 'true'
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          if [[ -z "${CRATES_IO_TOKEN}" ]]; then
+            echo "CRATES_IO_TOKEN is required when live publishing is enabled." >&2
+            exit 1
+          fi
+
+      - name: Cargo publish (live)
+        if: env.PUBLISH_LIVE == 'true'
+        working-directory: geodist-rs
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish --locked
+
+  python-wheels:
+    name: Python wheels (${{ matrix.target }} / py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    needs: [preflight, validation]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+            target: x86_64-unknown-linux-gnu
+            manylinux: auto
+          - os: ubuntu-latest
+            python-version: "3.12"
+            target: x86_64-unknown-linux-gnu
+            manylinux: auto
+          - os: macos-14
+            python-version: "3.12"
+            target: aarch64-apple-darwin
+            manylinux: ""
+          - os: macos-13
+            python-version: "3.12"
+            target: x86_64-apple-darwin
+            manylinux: ""
+          - os: windows-latest
+            python-version: "3.10"
+            target: x86_64-pc-windows-msvc
+            manylinux: ""
+          - os: windows-latest
+            python-version: "3.12"
+            target: x86_64-pc-windows-msvc
+            manylinux: ""
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Determine uv cache directory
+        id: uv-cache-dir
+        run: echo "dir=$(uv cache dir)" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.uv-cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-uv-release-${{ matrix.python-version }}-${{ hashFiles('pygeodist/pyproject.toml', 'pygeodist/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-release-${{ matrix.python-version }}-
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt,rust-src,llvm-tools-preview
+
+      - name: Cache cargo build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "geodist-rs -> target"
+
+      - name: Sync Python dependencies
+        working-directory: pygeodist
+        run: uv sync --all-extras --dev
+
+      - name: Build wheel
+        shell: bash
+        working-directory: pygeodist
+        env:
+          MANYLINUX: ${{ matrix.manylinux || '' }}
+        run: |
+          if [[ -n "${MANYLINUX}" ]]; then
+            uv run maturin build \
+              --release \
+              --locked \
+              --out dist \
+              --target "${{ matrix.target }}" \
+              --interpreter python \
+              --manylinux "${MANYLINUX}"
+          else
+            uv run maturin build \
+              --release \
+              --locked \
+              --out dist \
+              --target "${{ matrix.target }}" \
+              --interpreter python
+          fi
+
+      - name: Build source distribution
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        working-directory: pygeodist
+        run: uv run maturin sdist --out dist
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheels-${{ matrix.os }}-${{ matrix.target }}-py${{ matrix.python-version }}
+          path: |
+            pygeodist/dist/*.whl
+            pygeodist/dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  pypi-publish:
+    name: PyPI publish (gated)
+    runs-on: ubuntu-latest
+    needs: [preflight, validation, python-wheels]
+    if: needs.preflight.outputs.live == 'true'
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check PyPI token
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [[ -z "${PYPI_API_TOKEN}" ]]; then
+            echo "PYPI_API_TOKEN is required when live publishing is enabled." >&2
+            exit 1
+          fi
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.10.0
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+          packages-dir: dist
