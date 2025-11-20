@@ -80,6 +80,12 @@ uv run geodist info     # prints whether the extension loaded
 uv run pytest           # exercises the stub surface
 ```
 
+## Why PyO3 / Maturin?
+
+- PyO3 exposes the Rust kernels directly to Python with predictable type conversions, Rust-side validation, and minimal glue code to keep the Python surface thin.
+- Maturin aligns the build with Cargo, producing Python wheels/SDists without custom setup.py plumbing and slotting cleanly into uv/pip workflows.
+- This pairing keeps the Rust and Python artifacts in lockstep so geometry wrappers stay close to the validated kernels instead of drifting in a reimplementation.
+
 ## Python API scope and non-goals
 
 - Public exports today: `EARTH_RADIUS_METERS` and error types (`GeodistError` and the derived error classes).
