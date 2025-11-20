@@ -1,0 +1,63 @@
+# 3D Geometry Support (WIP)
+
+## Purpose
+
+- Explore adding optional 3D geometry handling (lat/lon + altitude) while keeping existing 2D performance and API stability.
+- Capture assumptions and approach options before implementation; this is a WIP scoping doc, not a committed roadmap.
+
+## Guiding Constraints
+
+- Preserve fast 2D hot paths: no per-point branching in inner loops.
+- Inputs are either all 2D or all 3D per call; no mixed-dimension batches.
+- Altitude expressed in meters and finite; lat/lon validation remains unchanged.
+- Keep FFI/PyO3 surfaces consistent with Rust types; update `_geodist_rs.pyi` alongside Rust bindings.
+- Avoid breaking public APIs; new types/flags should be additive and clearly named.
+
+## Target Capabilities
+
+1. Accept validated 3D points (lat, lon, alt_m) alongside existing 2D points.
+2. Compute 3D distances using ellipsoid + altitude (ECEF chord or selected metric) with a fixed mode per call.
+3. Support Hausdorff over 3D points with appropriate spatial indexing.
+4. Expose Python bindings that mirror 2D/3D Rust surfaces without mixed-dimension footguns.
+5. Maintain or improve current 2D performance baselines.
+
+## Subagent Execution Plan
+
+The following backlog is prioritized for a single subagent (or small group) to implement iteratively. Update the _Status_ and _Lessons Learned_ sections while working.
+
+### Task Backlog
+
+Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ deferred).
+
+| Priority | Task | Definition of Done | Notes | Status |
+| -------- | ---- | ------------------ | ----- | ------ |
+| P0 | Define distance semantics (surface arc vs 3D chord; which is default) | Decision recorded; downstream tasks reference chosen metric | Assumption: straight-line chord likely for 3D | 📝 |
+| P0 | Add 3D point type + validation (Rust + PyO3 stub) | `Point3D` (or equivalent) validated alt; doc + tests; pyi updated | Ensure no per-point branching for 2D | 📝 |
+| P0 | Add mode-aware distance kernel | Mode fixed per call; 2D path unchanged; 3D uses chosen metric; tests | Consider trait or enum mode | 📝 |
+| P1 | Extend Hausdorff to 3D | R-tree envelopes in 3D; clipped variants defined or deferred | Keep 2D perf unaffected | 📝 |
+| P1 | Python wrappers for 3D | Public API mirrors Rust; docs; tests | Avoid mixed-dimension inputs | 📝 |
+| P2 | Benchmarks and perf guardrails | Baseline 2D vs 3D; ensure no regressions | Integrate into CI later | 📝 |
+| P3 | CLI/interop helpers | Optional Typer/interop updates | Only if APIs stabilize | ⏸️ |
+
+### Risks & Mitigations
+
+- **Risk:** Ambiguous “3D distance” definition. **Mitigation:** Decide up front (surface arc, straight-line chord, or both via mode), document default.
+- **Risk:** 2D performance regression from branching. **Mitigation:** Fix mode per call; keep 2D code path identical and benchmark.
+- **Risk:** Mixed-dimension misuse. **Mitigation:** Validate consistency once per call; offer distinct types/constructors for 2D vs 3D.
+- **Risk:** Index/memory overhead in Hausdorff. **Mitigation:** Keep naive vs indexed switch; only use 3D envelopes when in 3D mode.
+
+### Open Questions
+
+- Should 3D “distance” default to straight-line chord or retain surface arc semantics with altitude-adjusted radius?
+- Do we need bounding volumes for altitude (3D AABB) or keep 2D clipping only?
+- Are there max/min altitude constraints we should enforce?
+- Should we expose both 2D and 3D APIs or a single mode-parameterized entry?
+
+## Status Tracking (to be updated by subagent)
+
+- **Latest completed task:** _None yet (WIP scope)._
+- **Next up:** _Pick distance semantics and default mode._
+
+## Lessons Learned (ongoing)
+
+- _Empty — fill in as exploration progresses._
