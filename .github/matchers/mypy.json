@@ -1,7 +1,7 @@
 {
   "problemMatcher": [
     {
-      "owner": "mypy",
+      "owner": "mypy-geodist",
       "pattern": [
         {
           "regexp": "^(.+):(\\d+):(\\d+): (error|note): (.+)$",
