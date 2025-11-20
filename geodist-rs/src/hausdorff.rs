@@ -390,6 +390,10 @@ fn hausdorff_directed_indexed<A: GeodesicAlgorithm>(
   Ok(max_min)
 }
 
+/// Directed 3D Hausdorff distance using a naive O(n*m) search.
+///
+/// Iterates over every origin/candidate pair and returns the maximum of the
+/// per-origin nearest-neighbor distances measured in ECEF meters.
 fn hausdorff_directed_3d_naive(origins: &[EcefPoint], candidates: &[EcefPoint]) -> f64 {
   let mut max_min: f64 = 0.0;
 
@@ -405,6 +409,10 @@ fn hausdorff_directed_3d_naive(origins: &[EcefPoint], candidates: &[EcefPoint]) 
   max_min
 }
 
+/// Directed 3D Hausdorff distance using an R-tree for nearest-neighbor lookup.
+///
+/// Builds an index over the candidate set and queries the closest point for
+/// each origin, computing distances in ECEF meters.
 fn hausdorff_directed_3d_indexed(origins: &[EcefPoint], candidates: &[EcefPoint]) -> f64 {
   let index = RTree::bulk_load(index_ecef_points(candidates));
   let mut max_min: f64 = 0.0;
