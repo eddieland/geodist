@@ -16,12 +16,12 @@ the Rust surface settles.
 
 ## What works now
 
-- Validated geodesic primitives (`Point`, `Distance`, `Ellipsoid`, `BoundingBox`) with strict input checking.
+- Rust kernels expose validated geodesic primitives (`Point`, `Distance`, `Ellipsoid`, `BoundingBox`) with strict input checking.
 - Great-circle distance on a spherical Earth (WGS84 mean radius by default) plus custom radius/ellipsoid helpers.
 - Batch distance calculation for many point pairs.
 - Initial/final bearing output that reuses the distance kernel.
 - Directed and symmetric Hausdorff distance over point sets, with bounding-box-clipped variants and an automatic switch between an `rstar` index and an O(n*m) fallback for tiny inputs.
-- Feature-gated PyO3 module exposing `EARTH_RADIUS_METERS` for Python wheel smoke tests (future bindings will forward the Rust kernels).
+- Python bindings currently re-export the compiled `EARTH_RADIUS_METERS` constant and error types only; geometry wrappers will map the Rust structs once the surface settles.
 
 ## Roadmap highlights
 
@@ -52,7 +52,9 @@ dependency.
 ## Python quickstart (smoke test)
 
 The Python package includes the PyO3 extension stub and a small Typer CLI to
-confirm the extension loads. Kernels are not wired into the Python wrapper yet.
+confirm the extension loads. Kernels are not wired into the Python wrapper yet,
+and the public API is intentionally tiny until Rust-backed geometry wrappers are
+ready.
 
 ```bash
 cd pygeodist
@@ -61,6 +63,13 @@ uv run maturin develop  # builds the extension module
 uv run geodist info     # prints whether the extension loaded
 uv run pytest           # exercises the stub surface
 ```
+
+## Python API scope and non-goals
+
+- Public exports today: `EARTH_RADIUS_METERS` and error types (`GeodistError` and the derived error classes).
+- Rust-backed geometry wrappers will mirror the Rust structs once exposed; until then the package does not promise a Shapely-like surface.
+- Optional interop helpers for Shapely will arrive later and stay off the default dependency tree.
+- The Typer CLI is for local development only and should not be treated as a user-facing entrypoint.
 
 ## Project Status
 

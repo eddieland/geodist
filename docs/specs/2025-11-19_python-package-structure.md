@@ -32,7 +32,7 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Rewrite public API scope doc and `__all__` to reflect the minimal surface (constants, errors, Rust-backed geometry wrappers). | README and docstrings describe the small API; no promises of Shapely breadth. | Aligns consumer expectations with reality. | 📝 |
+| P0 | Rewrite public API scope doc and `__all__` to reflect the minimal surface (constants, errors, Rust-backed geometry wrappers). | README and docstrings describe the small API; no promises of Shapely breadth. | Aligns consumer expectations with reality. | ✅ |
 | P0 | Define Rust-backed geometry wrappers and constructors. | `_geodist_rs.pyi` exposes core structs; Python wrappers validate inputs and keep immutability; no Shapely dependency. | Keeps typing ready while matching Rust models. | 📝 |
 | P1 | Ship optional Shapely conversion helpers and verify packaging/CLI alignment. | `interop_shapely.py` converts to/from wrappers (guarded imports, skipped tests when missing); packaging keeps deps lean; CLI reflects the limited API. | Bundles small tasks to avoid churn. | 📝 |
 | P2 | Document non-goals and future kernel exposures without promising timelines. | README states Shapely parity is out of scope; guidance for interop users; backlog of candidate functions gated on Rust readiness. | Reduces support burden and avoids churn. | 📝 |
@@ -56,12 +56,13 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Refocused plan on Rust-backed geometry wrappers with optional Shapely interop._
-- **Next up:** _Document minimal API and non-goals in README and `__all__`, and sketch wrapper contracts in `_geodist_rs.pyi`._
+- **Latest completed task:** _Documented the minimal Python API scope (`__all__`, README) and captured upcoming wrapper contracts in the stub._
+- **Next up:** _Define Rust-backed geometry wrappers and constructors._
 
 ## Lessons Learned (ongoing)
 
 - _Match ambition to available kernels; keep wrappers aligned with Rust structs rather than speculative Python-only models._
+- _Documenting the intentionally small Python surface early prevents overpromising and keeps stubs honest about what exists today._
 - _Keep public exports tiny so packaging and documentation stay credible during early development._
 - _Guard extension imports and fail loudly but politely when kernels are absent._
 - _Interop helpers must be explicit and optional to avoid dragging in heavy dependencies by default._

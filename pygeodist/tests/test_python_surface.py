@@ -22,6 +22,7 @@ def test_public_api_reflects_trimmed_surface() -> None:
         "GeodistError",
         "GeometryTypeError",
         "InvalidGeometryError",
+        "KernelExecutionError",
         "KernelUnavailableError",
         "VectorizationError",
     )
