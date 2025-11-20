@@ -56,8 +56,8 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Mirrored the Rust `geodesic_distance` kernel into the Python bindings with typed wrappers and stubs._
-- **Next up:** _Expose additional kernel results (bearings, Hausdorff) once Rust surfaces them._
+- **Latest completed task:** _Surfaced Rust bearings and Hausdorff kernels through the Python bindings, including bounding-box wrappers and stub updates._
+- **Next up:** _Add witness point reporting and any new geometry handles (LineString/Polygon) once Rust exports them._
 
 ## Lessons Learned (ongoing)
 
@@ -69,3 +69,4 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 - _Validate coordinate ranges in Python before constructing Rust handles to keep the extension surface minimal._
 - _Guard optional dependencies both at import time and in tests so the dev workflow stays predictable even without optional extras._
 - _Map Rust kernel errors to Python exceptions once to keep wrappers small and messages consistent._
+- _Return kernel outputs as small immutable containers to avoid leaking extension internals while keeping the API explicit._

@@ -37,7 +37,7 @@ the Rust surface settles.
 - Batch distance calculation for many point pairs.
 - Initial/final bearing output that reuses the distance kernel.
 - Directed and symmetric Hausdorff distance over point sets, with bounding-box-clipped variants and an automatic switch between an `rstar` index and an O(n*m) fallback for tiny inputs.
-- Python bindings currently re-export the compiled `EARTH_RADIUS_METERS` constant and error types only; geometry wrappers will map the Rust structs once the surface settles.
+- Python bindings expose a Rust-backed `Point` and `BoundingBox` along with `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff helpers. Imports stay guarded so Shapely interop remains optional.
 
 ## Roadmap highlights
 
@@ -68,9 +68,8 @@ dependency.
 ## Python quickstart (smoke test)
 
 The Python package includes the PyO3 extension stub and a small Typer CLI to
-confirm the extension loads. Kernels are not wired into the Python wrapper yet,
-and the public API is intentionally tiny until Rust-backed geometry wrappers are
-ready.
+confirm the extension loads. Build the extension before exercising the Python
+helpers to ensure the Rust kernels are available.
 
 ```bash
 cd pygeodist
@@ -78,6 +77,19 @@ uv sync --all-extras --dev
 uv run maturin develop  # builds the extension module
 uv run geodist info     # prints whether the extension loaded
 uv run pytest           # exercises the stub surface
+```
+
+```python
+from geodist import Point, geodesic_with_bearings, hausdorff
+
+origin = Point(0.0, 0.0)
+east = Point(0.0, 1.0)
+
+result = geodesic_with_bearings(origin, east)
+print(result.distance_meters, result.initial_bearing_degrees, result.final_bearing_degrees)
+
+distance = hausdorff([origin], [east])
+print(distance)
 ```
 
 ## Why PyO3 / Maturin?
@@ -89,10 +101,10 @@ uv run pytest           # exercises the stub surface
 
 ## Python API scope and non-goals
 
-- Public exports today: `EARTH_RADIUS_METERS`, error types (`GeodistError` and `InvalidGeometryError`), a Rust-backed `Point` wrapper, and `geodesic_distance(point_a, point_b)` returning meters on the WGS84 mean radius.
+- Public exports today: `EARTH_RADIUS_METERS`, error types (`GeodistError` and `InvalidGeometryError`), Rust-backed `Point` and `BoundingBox` wrappers, `geodesic_distance`, `geodesic_with_bearings`, and Hausdorff (directed + clipped) helpers.
 - Non-goals: mirroring Shapely parity, accepting arbitrary geometry tuples, or silently coercing unsupported geometry kinds.
 - Interop guidance: install the `shapely` extra when needed; conversions are explicit, guard imports, and currently error for any geometry beyond `Point` instead of guessing.
-- Future Python surface (no promised dates): wrappers around additional kernel results (bearings, Hausdorff, bounding-box variants) and `LineString`/`Polygon` once Rust exposes them (gated on Rust readiness to avoid drift).
+- Future Python surface (no promised dates): witness point reporting, additional geometry wrappers, and vectorized helpers once Rust exposes them (gated on Rust readiness to avoid drift).
 - The Typer CLI is for local development only and should not be treated as a user-facing entrypoint.
 
 ## Project Status

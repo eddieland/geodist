@@ -7,9 +7,12 @@ from math import isfinite
 
 from . import _geodist_rs
 from .errors import InvalidGeometryError
-from .types import LatitudeDegrees, LongitudeDegrees, PointDegrees
+from .types import BoundingBoxDegrees, LatitudeDegrees, LongitudeDegrees, PointDegrees
 
-__all__ = ("Point",)
+__all__ = (
+    "Point",
+    "BoundingBox",
+)
 
 
 class Point:
@@ -104,3 +107,71 @@ def _coerce_longitude(longitude_degrees: float) -> LongitudeDegrees:
         max_value=_LONGITUDE_MAX_DEGREES,
         name="longitude_degrees",
     )
+
+
+class BoundingBox:
+    """Immutable geographic bounding box expressed in degrees."""
+
+    __slots__ = ("_handle",)
+
+    def __init__(
+        self,
+        min_latitude_degrees: LatitudeDegrees,
+        max_latitude_degrees: LatitudeDegrees,
+        min_longitude_degrees: LongitudeDegrees,
+        max_longitude_degrees: LongitudeDegrees,
+    ) -> None:
+        min_latitude = _coerce_latitude(min_latitude_degrees)
+        max_latitude = _coerce_latitude(max_latitude_degrees)
+        min_longitude = _coerce_longitude(min_longitude_degrees)
+        max_longitude = _coerce_longitude(max_longitude_degrees)
+
+        if min_latitude > max_latitude:
+            raise InvalidGeometryError(
+                "min_latitude_degrees must not exceed max_latitude_degrees: "
+                f"{min_latitude} > {max_latitude}"
+            )
+        if min_longitude > max_longitude:
+            raise InvalidGeometryError(
+                "min_longitude_degrees must not exceed max_longitude_degrees: "
+                f"{min_longitude} > {max_longitude}"
+            )
+
+        self._handle = _geodist_rs.BoundingBox(
+            min_latitude,
+            max_latitude,
+            min_longitude,
+            max_longitude,
+        )
+
+    @property
+    def min_latitude_degrees(self) -> LatitudeDegrees:
+        return float(self._handle.min_latitude_degrees)
+
+    @property
+    def max_latitude_degrees(self) -> LatitudeDegrees:
+        return float(self._handle.max_latitude_degrees)
+
+    @property
+    def min_longitude_degrees(self) -> LongitudeDegrees:
+        return float(self._handle.min_longitude_degrees)
+
+    @property
+    def max_longitude_degrees(self) -> LongitudeDegrees:
+        return float(self._handle.max_longitude_degrees)
+
+    def to_tuple(self) -> BoundingBoxDegrees:
+        return self._handle.to_tuple()
+
+    def __iter__(self) -> Iterator[float]:
+        yield from self.to_tuple()
+
+    def __repr__(self) -> str:
+        return (
+            "BoundingBox("
+            f"min_latitude_degrees={self.min_latitude_degrees}, "
+            f"max_latitude_degrees={self.max_latitude_degrees}, "
+            f"min_longitude_degrees={self.min_longitude_degrees}, "
+            f"max_longitude_degrees={self.max_longitude_degrees}"
+            ")"
+        )

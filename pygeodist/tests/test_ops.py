@@ -8,7 +8,17 @@ from pytest import approx
 if importlib.util.find_spec("geodist._geodist_rs") is None:
     pytest.skip("Rust extension is not built; skipping distance checks.", allow_module_level=True)
 
-from geodist import Point, geodesic_distance
+from geodist import (
+    BoundingBox,
+    GeodesicResult,
+    Point,
+    geodesic_distance,
+    geodesic_with_bearings,
+    hausdorff,
+    hausdorff_clipped,
+    hausdorff_directed,
+    hausdorff_directed_clipped,
+)
 
 
 def test_geodesic_distance_matches_rust_kernel() -> None:
@@ -21,3 +31,46 @@ def test_geodesic_distance_matches_rust_kernel() -> None:
 def test_geodesic_distance_requires_point_instances() -> None:
     with pytest.raises(TypeError):
         geodesic_distance((0.0, 0.0), (0.0, 1.0))  # type: ignore[arg-type]
+
+
+def test_geodesic_with_bearings_returns_distance_and_angles() -> None:
+    origin = Point(0.0, 0.0)
+    east = Point(0.0, 1.0)
+
+    result = geodesic_with_bearings(origin, east)
+    assert isinstance(result, GeodesicResult)
+    assert result.distance_meters == approx(111_195.080_233_532_9)
+    assert result.initial_bearing_degrees == approx(90.0)
+    assert result.final_bearing_degrees == approx(90.0)
+
+
+def test_geodesic_with_bearings_requires_points() -> None:
+    origin = Point(0.0, 0.0)
+    with pytest.raises(TypeError):
+        geodesic_with_bearings(origin, (0.0, 1.0))  # type: ignore[arg-type]
+
+
+def test_hausdorff_and_directed_match_expected_distances() -> None:
+    origin = Point(0.0, 0.0)
+    east = Point(0.0, 1.0)
+
+    assert hausdorff([origin], [east]) == approx(geodesic_distance(origin, east))
+    assert hausdorff_directed([origin], [east]) == approx(geodesic_distance(origin, east))
+
+
+def test_hausdorff_clipped_filters_points() -> None:
+    origin = Point(0.0, 0.0)
+    east = Point(0.0, 1.0)
+    east_only_box = BoundingBox(-1.0, 1.0, 0.5, 1.5)
+
+    # Without clipping, A includes the origin so the maximum mismatch is origin->east.
+    assert hausdorff_directed([origin, east], [east]) == approx(geodesic_distance(origin, east))
+
+    # Clipping removes the origin, so both sets reduce to [east] and the distance collapses to 0.
+    assert hausdorff_directed_clipped([origin, east], [east], east_only_box) == approx(0.0)
+    assert hausdorff_clipped([origin, east], [east], east_only_box) == approx(0.0)
+
+
+def test_hausdorff_rejects_non_points() -> None:
+    with pytest.raises(TypeError):
+        hausdorff(["not a point"], ["still not a point"])  # type: ignore[list-item]

@@ -8,7 +8,7 @@ import pytest
 if importlib.util.find_spec("geodist._geodist_rs") is None:
     pytest.skip("Rust extension is not built; skipping geometry checks.", allow_module_level=True)
 
-from geodist import InvalidGeometryError, Point
+from geodist import BoundingBox, InvalidGeometryError, Point
 
 
 def test_point_accepts_numeric_coordinates() -> None:
@@ -54,3 +54,21 @@ def test_point_rejects_bool_inputs() -> None:
 
     with pytest.raises(InvalidGeometryError):
         Point(0.0, False)  # type: ignore[arg-type]
+
+
+def test_bounding_box_accepts_ordered_coordinates() -> None:
+    bbox = BoundingBox(-10.0, 10.0, -20.0, 20.0)
+    assert bbox.to_tuple() == (-10.0, 10.0, -20.0, 20.0)
+
+
+def test_bounding_box_rejects_invalid_ranges() -> None:
+    with pytest.raises(InvalidGeometryError):
+        BoundingBox(10.0, -10.0, -20.0, 20.0)
+
+    with pytest.raises(InvalidGeometryError):
+        BoundingBox(-10.0, 10.0, 20.0, -20.0)
+
+
+def test_bounding_box_rejects_bool_inputs() -> None:
+    with pytest.raises(InvalidGeometryError):
+        BoundingBox(True, 10.0, -20.0, 20.0)  # type: ignore[arg-type]

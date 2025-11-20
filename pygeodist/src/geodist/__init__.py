@@ -11,8 +11,16 @@ from typing import Final
 
 from . import _geodist_rs
 from .errors import GeodistError, InvalidGeometryError
-from .geometry import Point
-from .ops import geodesic_distance
+from .geometry import BoundingBox, Point
+from .ops import (
+    GeodesicResult,
+    geodesic_distance,
+    geodesic_with_bearings,
+    hausdorff,
+    hausdorff_clipped,
+    hausdorff_directed,
+    hausdorff_directed_clipped,
+)
 
 EARTH_RADIUS_METERS: Final[float] = float(_geodist_rs.EARTH_RADIUS_METERS)
 
@@ -20,6 +28,13 @@ __all__ = (
     "EARTH_RADIUS_METERS",
     "GeodistError",
     "InvalidGeometryError",
+    "BoundingBox",
     "Point",
+    "GeodesicResult",
     "geodesic_distance",
+    "geodesic_with_bearings",
+    "hausdorff",
+    "hausdorff_clipped",
+    "hausdorff_directed",
+    "hausdorff_directed_clipped",
 )
