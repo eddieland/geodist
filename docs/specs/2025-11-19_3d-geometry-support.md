@@ -31,7 +31,7 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Define distance semantics (surface arc vs 3D chord; which is default) | Decision recorded; downstream tasks reference chosen metric | Assumption: straight-line chord likely for 3D | 📝 |
+| P0 | Define distance semantics (surface arc vs 3D chord; which is default) | Decision recorded; downstream tasks reference chosen metric | Default: straight-line chord in ECEF; keep surface arc as future optional mode if needed | ✅ |
 | P0 | Add 3D point type + validation (Rust + PyO3 stub) | `Point3D` (or equivalent) validated alt; doc + tests; pyi updated | Ensure no per-point branching for 2D | 📝 |
 | P0 | Add mode-aware distance kernel | Mode fixed per call; 2D path unchanged; 3D uses chosen metric; tests | Consider trait or enum mode | 📝 |
 | P1 | Extend Hausdorff to 3D | R-tree envelopes in 3D; clipped variants defined or deferred | Keep 2D perf unaffected | 📝 |
@@ -55,9 +55,15 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _None yet (WIP scope)._
-- **Next up:** _Pick distance semantics and default mode._
+- **Latest completed task:** Chose straight-line chord in ECEF as the default 3D metric; surface arc can be added later if there is demand.
+- **Next up:** Implement validated 3D point type + mode-aware distance kernel that keeps the 2D hot path identical.
 
 ## Lessons Learned (ongoing)
 
 - _Empty — fill in as exploration progresses._
+
+## Decision: 3D Metric Choice
+
+- Default 3D distance metric: straight-line chord in ECEF using the chosen ellipsoid. This matches “as-the-crow-flies” through-space measurements, lines up with altitude-aware use cases (LOS, flight paths), and avoids adding branching to the 2D hot path.
+- Rationale: Arc distance would overstate true 3D straight-line travel and requires altitude-adjusted surface math; the chord keeps the implementation simple and fast while staying consistent with an ellipsoid model.
+- Future work: If users need surface-arc semantics with altitude-adjusted radius (or other models), we can add an explicit mode/entrypoint without changing the chord default. Contributions for additional algorithms are welcome; keep the 2D and chord paths monomorphized so hot loops stay branch-free.
