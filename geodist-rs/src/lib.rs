@@ -17,8 +17,9 @@ pub use distance::{
   geodesic_with_bearings_on_ellipsoid, geodesic_with_bearings_on_radius,
 };
 pub use hausdorff::{
-  hausdorff, hausdorff_3d, hausdorff_3d_on_ellipsoid, hausdorff_clipped, hausdorff_clipped_3d,
-  hausdorff_clipped_3d_on_ellipsoid, hausdorff_directed, hausdorff_directed_3d, hausdorff_directed_3d_on_ellipsoid,
-  hausdorff_directed_clipped, hausdorff_directed_clipped_3d, hausdorff_directed_clipped_3d_on_ellipsoid,
+  HausdorffDirectedWitness, HausdorffWitness, hausdorff, hausdorff_3d, hausdorff_3d_on_ellipsoid, hausdorff_clipped,
+  hausdorff_clipped_3d, hausdorff_clipped_3d_on_ellipsoid, hausdorff_directed, hausdorff_directed_3d,
+  hausdorff_directed_3d_on_ellipsoid, hausdorff_directed_clipped, hausdorff_directed_clipped_3d,
+  hausdorff_directed_clipped_3d_on_ellipsoid,
 };
 pub use types::{BoundingBox, Distance, Ellipsoid, GeodistError, Point, Point3D};

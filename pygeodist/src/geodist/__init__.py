@@ -14,6 +14,8 @@ from .errors import GeodistError, InvalidGeometryError
 from .geometry import BoundingBox, Point, Point3D
 from .ops import (
     GeodesicResult,
+    HausdorffDirectedWitness,
+    HausdorffWitness,
     geodesic_distance,
     geodesic_distance_3d,
     geodesic_with_bearings,
@@ -37,6 +39,8 @@ __all__ = (
     "Point",
     "Point3D",
     "GeodesicResult",
+    "HausdorffDirectedWitness",
+    "HausdorffWitness",
     "geodesic_distance",
     "geodesic_distance_3d",
     "geodesic_with_bearings",

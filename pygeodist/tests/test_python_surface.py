@@ -24,6 +24,8 @@ def test_public_api_reflects_trimmed_surface() -> None:
         "Point",
         "Point3D",
         "GeodesicResult",
+        "HausdorffDirectedWitness",
+        "HausdorffWitness",
         "geodesic_distance",
         "geodesic_distance_3d",
         "geodesic_with_bearings",

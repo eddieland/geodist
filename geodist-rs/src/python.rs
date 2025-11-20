@@ -15,6 +15,80 @@ use pyo3::wrap_pyfunction;
 use crate::constants::EARTH_RADIUS_METERS;
 use crate::{distance, hausdorff as hausdorff_kernel, types};
 
+#[pyclass(frozen)]
+#[derive(Debug, Clone)]
+pub struct HausdorffDirectedWitness {
+  #[pyo3(get)]
+  distance_meters: f64,
+  #[pyo3(get)]
+  origin_index: usize,
+  #[pyo3(get)]
+  candidate_index: usize,
+}
+
+impl From<hausdorff_kernel::HausdorffDirectedWitness> for HausdorffDirectedWitness {
+  fn from(value: hausdorff_kernel::HausdorffDirectedWitness) -> Self {
+    Self {
+      distance_meters: value.distance().meters(),
+      origin_index: value.origin_index(),
+      candidate_index: value.candidate_index(),
+    }
+  }
+}
+
+#[pymethods]
+impl HausdorffDirectedWitness {
+  /// Return a tuple `(distance_meters, origin_index, candidate_index)`.
+  pub fn to_tuple(&self) -> (f64, usize, usize) {
+    (self.distance_meters, self.origin_index, self.candidate_index)
+  }
+
+  fn __repr__(&self) -> String {
+    format!(
+      "HausdorffDirectedWitness(distance_meters={}, origin_index={}, candidate_index={})",
+      self.distance_meters, self.origin_index, self.candidate_index
+    )
+  }
+}
+
+#[pyclass(frozen)]
+#[derive(Debug, Clone)]
+pub struct HausdorffWitness {
+  #[pyo3(get)]
+  distance_meters: f64,
+  #[pyo3(get)]
+  a_to_b: HausdorffDirectedWitness,
+  #[pyo3(get)]
+  b_to_a: HausdorffDirectedWitness,
+}
+
+impl From<hausdorff_kernel::HausdorffWitness> for HausdorffWitness {
+  fn from(value: hausdorff_kernel::HausdorffWitness) -> Self {
+    Self {
+      distance_meters: value.distance().meters(),
+      a_to_b: value.a_to_b().into(),
+      b_to_a: value.b_to_a().into(),
+    }
+  }
+}
+
+#[pymethods]
+impl HausdorffWitness {
+  /// Return a tuple `(distance_meters, a_to_b, b_to_a)` where the latter two
+  /// are witness tuples.
+  pub fn to_tuple(&self) -> (f64, (f64, usize, usize), (f64, usize, usize)) {
+    (self.distance_meters, self.a_to_b.to_tuple(), self.b_to_a.to_tuple())
+  }
+
+  fn __repr__(&self) -> String {
+    let (dist, (a_dist, a_origin, a_candidate), (b_dist, b_origin, b_candidate)) = self.to_tuple();
+    format!(
+      "HausdorffWitness(distance_meters={}, a_to_b=(distance_meters={}, origin_index={}, candidate_index={}), \
+       b_to_a=(distance_meters={}, origin_index={}, candidate_index={}))",
+      dist, a_dist, a_origin, a_candidate, b_dist, b_origin, b_candidate
+    )
+  }
+}
 /// Geographic point expressed in degrees.
 ///
 /// The struct is intentionally minimal and opaque to Python callers;
@@ -231,86 +305,94 @@ fn geodesic_distance_3d(p1: &Point3D, p2: &Point3D) -> PyResult<f64> {
 }
 
 #[pyfunction]
-fn hausdorff_directed(a: Vec<Point>, b: Vec<Point>) -> PyResult<f64> {
+fn hausdorff_directed(a: Vec<Point>, b: Vec<Point>) -> PyResult<HausdorffDirectedWitness> {
   let points_a = map_to_points(&a)?;
   let points_b = map_to_points(&b)?;
 
   hausdorff_kernel::hausdorff_directed(&points_a, &points_b)
-    .map(|distance| distance.meters())
+    .map(HausdorffDirectedWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff(a: Vec<Point>, b: Vec<Point>) -> PyResult<f64> {
+fn hausdorff(a: Vec<Point>, b: Vec<Point>) -> PyResult<HausdorffWitness> {
   let points_a = map_to_points(&a)?;
   let points_b = map_to_points(&b)?;
 
   hausdorff_kernel::hausdorff(&points_a, &points_b)
-    .map(|distance| distance.meters())
+    .map(HausdorffWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff_directed_clipped(a: Vec<Point>, b: Vec<Point>, bounding_box: &BoundingBox) -> PyResult<f64> {
+fn hausdorff_directed_clipped(
+  a: Vec<Point>,
+  b: Vec<Point>,
+  bounding_box: &BoundingBox,
+) -> PyResult<HausdorffDirectedWitness> {
   let points_a = map_to_points(&a)?;
   let points_b = map_to_points(&b)?;
   let bbox = map_to_bounding_box(bounding_box)?;
 
   hausdorff_kernel::hausdorff_directed_clipped(&points_a, &points_b, bbox)
-    .map(|distance| distance.meters())
+    .map(HausdorffDirectedWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff_clipped(a: Vec<Point>, b: Vec<Point>, bounding_box: &BoundingBox) -> PyResult<f64> {
+fn hausdorff_clipped(a: Vec<Point>, b: Vec<Point>, bounding_box: &BoundingBox) -> PyResult<HausdorffWitness> {
   let points_a = map_to_points(&a)?;
   let points_b = map_to_points(&b)?;
   let bbox = map_to_bounding_box(bounding_box)?;
 
   hausdorff_kernel::hausdorff_clipped(&points_a, &points_b, bbox)
-    .map(|distance| distance.meters())
+    .map(HausdorffWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff_directed_3d(a: Vec<Point3D>, b: Vec<Point3D>) -> PyResult<f64> {
+fn hausdorff_directed_3d(a: Vec<Point3D>, b: Vec<Point3D>) -> PyResult<HausdorffDirectedWitness> {
   let points_a = map_to_points3d(&a)?;
   let points_b = map_to_points3d(&b)?;
 
   hausdorff_kernel::hausdorff_directed_3d(&points_a, &points_b)
-    .map(|distance| distance.meters())
+    .map(HausdorffDirectedWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff_3d(a: Vec<Point3D>, b: Vec<Point3D>) -> PyResult<f64> {
+fn hausdorff_3d(a: Vec<Point3D>, b: Vec<Point3D>) -> PyResult<HausdorffWitness> {
   let points_a = map_to_points3d(&a)?;
   let points_b = map_to_points3d(&b)?;
 
   hausdorff_kernel::hausdorff_3d(&points_a, &points_b)
-    .map(|distance| distance.meters())
+    .map(HausdorffWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff_directed_clipped_3d(a: Vec<Point3D>, b: Vec<Point3D>, bounding_box: &BoundingBox) -> PyResult<f64> {
+fn hausdorff_directed_clipped_3d(
+  a: Vec<Point3D>,
+  b: Vec<Point3D>,
+  bounding_box: &BoundingBox,
+) -> PyResult<HausdorffDirectedWitness> {
   let points_a = map_to_points3d(&a)?;
   let points_b = map_to_points3d(&b)?;
   let bbox = map_to_bounding_box(bounding_box)?;
 
   hausdorff_kernel::hausdorff_directed_clipped_3d(&points_a, &points_b, bbox)
-    .map(|distance| distance.meters())
+    .map(HausdorffDirectedWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-fn hausdorff_clipped_3d(a: Vec<Point3D>, b: Vec<Point3D>, bounding_box: &BoundingBox) -> PyResult<f64> {
+fn hausdorff_clipped_3d(a: Vec<Point3D>, b: Vec<Point3D>, bounding_box: &BoundingBox) -> PyResult<HausdorffWitness> {
   let points_a = map_to_points3d(&a)?;
   let points_b = map_to_points3d(&b)?;
   let bbox = map_to_bounding_box(bounding_box)?;
 
   hausdorff_kernel::hausdorff_clipped_3d(&points_a, &points_b, bbox)
-    .map(|distance| distance.meters())
+    .map(HausdorffWitness::from)
     .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
@@ -321,6 +403,8 @@ fn _geodist_rs(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add_class::<Point3D>()?;
   m.add_class::<GeodesicSolution>()?;
   m.add_class::<BoundingBox>()?;
+  m.add_class::<HausdorffDirectedWitness>()?;
+  m.add_class::<HausdorffWitness>()?;
   m.add_function(wrap_pyfunction!(geodesic_distance, m)?)?;
   m.add_function(wrap_pyfunction!(geodesic_with_bearings, m)?)?;
   m.add_function(wrap_pyfunction!(geodesic_distance_3d, m)?)?;

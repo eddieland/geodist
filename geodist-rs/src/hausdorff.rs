@@ -13,22 +13,109 @@ use crate::{BoundingBox, Distance, Ellipsoid, GeodistError, Point, Point3D};
 const MIN_INDEX_CANDIDATE_SIZE: usize = 32;
 const MAX_NAIVE_CROSS_PRODUCT: usize = 4_000;
 
+/// Directed Hausdorff result including the realizing pair of points.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HausdorffDirectedWitness {
+  distance: Distance,
+  origin_index: usize,
+  candidate_index: usize,
+}
+
+impl HausdorffDirectedWitness {
+  /// Directed Hausdorff distance in meters.
+  pub fn distance(&self) -> Distance {
+    self.distance
+  }
+
+  /// Index of the origin point in the source iterable.
+  ///
+  /// The index refers to the caller-supplied order prior to any clipping.
+  pub fn origin_index(&self) -> usize {
+    self.origin_index
+  }
+
+  /// Index of the nearest neighbor in the candidate iterable.
+  ///
+  /// The index refers to the caller-supplied order prior to any clipping.
+  pub fn candidate_index(&self) -> usize {
+    self.candidate_index
+  }
+
+  fn from_raw(raw: DirectedHausdorffMeters) -> Result<Self, GeodistError> {
+    let distance = Distance::from_meters(raw.meters)?;
+    Ok(Self {
+      distance,
+      origin_index: raw.origin_index,
+      candidate_index: raw.candidate_index,
+    })
+  }
+}
+
+/// Symmetric Hausdorff result containing both directed witnesses.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HausdorffWitness {
+  distance: Distance,
+  a_to_b: HausdorffDirectedWitness,
+  b_to_a: HausdorffDirectedWitness,
+}
+
+impl HausdorffWitness {
+  /// Maximum distance across both directed evaluations in meters.
+  pub fn distance(&self) -> Distance {
+    self.distance
+  }
+
+  /// Directed witness from the first argument to the second.
+  pub fn a_to_b(&self) -> HausdorffDirectedWitness {
+    self.a_to_b
+  }
+
+  /// Directed witness from the second argument back to the first.
+  pub fn b_to_a(&self) -> HausdorffDirectedWitness {
+    self.b_to_a
+  }
+
+  fn new(a_to_b: HausdorffDirectedWitness, b_to_a: HausdorffDirectedWitness) -> Result<Self, GeodistError> {
+    let meters = a_to_b.distance().meters().max(b_to_a.distance().meters());
+    let distance = Distance::from_meters(meters)?;
+
+    Ok(Self {
+      distance,
+      a_to_b,
+      b_to_a,
+    })
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HausdorffStrategy {
   Naive,
   Indexed,
 }
 
+#[derive(Clone, Copy)]
+struct Positioned<T> {
+  point: T,
+  index: usize,
+}
+
+#[derive(Clone, Copy)]
+struct DirectedHausdorffMeters {
+  meters: f64,
+  origin_index: usize,
+  candidate_index: usize,
+}
+
 /// Directed Hausdorff distance from set `a` to set `b` using the default
-/// spherical geodesic.
+/// spherical geodesic, returning the realizing witness pair.
 ///
 /// Inputs are in degrees. Returns the maximum, over all points in `a`, of the
-/// minimum distance to any point in `b` as a validated [`Distance`].
+/// minimum distance to any point in `b` alongside the origin/candidate indices.
 ///
 /// # Errors
 /// Returns [`GeodistError::EmptyPointSet`] when either slice is empty, or any
 /// validation error surfaced by [`Point::validate`].
-pub fn hausdorff_directed(a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
+pub fn hausdorff_directed(a: &[Point], b: &[Point]) -> Result<HausdorffDirectedWitness, GeodistError> {
   hausdorff_directed_with(&Spherical::default(), a, b)
 }
 
@@ -45,30 +132,27 @@ pub fn hausdorff_directed_with<A: GeodesicAlgorithm>(
   algorithm: &A,
   a: &[Point],
   b: &[Point],
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffDirectedWitness, GeodistError> {
   ensure_non_empty(a)?;
   ensure_non_empty(b)?;
   validate_points(a)?;
   validate_points(b)?;
 
-  let strategy = choose_strategy(a.len(), b.len());
-  let meters = match strategy {
-    HausdorffStrategy::Naive => hausdorff_directed_naive(algorithm, a, b)?,
-    HausdorffStrategy::Indexed => hausdorff_directed_indexed(algorithm, a, b)?,
-  };
-
-  Distance::from_meters(meters)
+  let origins = position_points(a);
+  let candidates = position_points(b);
+  hausdorff_directed_positioned_with(algorithm, &origins, &candidates)
 }
 
 /// Symmetric Hausdorff distance between sets `a` and `b`.
 ///
 /// Computes the directed Hausdorff distance in both directions with the
-/// default spherical geodesic and returns the larger of the two.
+/// default spherical geodesic and returns the larger of the two along with
+/// both witnesses.
 ///
 /// # Errors
 /// Returns [`GeodistError::EmptyPointSet`] when either slice is empty, or any
 /// validation error surfaced by [`Point::validate`].
-pub fn hausdorff(a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
+pub fn hausdorff(a: &[Point], b: &[Point]) -> Result<HausdorffWitness, GeodistError> {
   hausdorff_with(&Spherical::default(), a, b)
 }
 
@@ -79,15 +163,18 @@ pub fn hausdorff(a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
 ///
 /// # Errors
 /// Propagates the same validation and empty-set errors as [`hausdorff`].
-pub fn hausdorff_with<A: GeodesicAlgorithm>(algorithm: &A, a: &[Point], b: &[Point]) -> Result<Distance, GeodistError> {
+pub fn hausdorff_with<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  a: &[Point],
+  b: &[Point],
+) -> Result<HausdorffWitness, GeodistError> {
   let forward = hausdorff_directed_with(algorithm, a, b)?;
   let reverse = hausdorff_directed_with(algorithm, b, a)?;
-  let meters = forward.meters().max(reverse.meters());
-  Distance::from_meters(meters)
+  HausdorffWitness::new(forward, reverse)
 }
 
 /// Directed Hausdorff distance from set `a` to set `b` using ECEF chord
-/// distance.
+/// distance, returning the realizing witness pair.
 ///
 /// Inputs are 3D geographic points expressed in degrees/meters. Returns the
 /// maximum, over all points in `a`, of the minimum straight-line distance to
@@ -96,7 +183,7 @@ pub fn hausdorff_with<A: GeodesicAlgorithm>(algorithm: &A, a: &[Point], b: &[Poi
 /// # Errors
 /// Returns [`GeodistError::EmptyPointSet`] when either slice is empty, or any
 /// validation error surfaced by [`Point3D::validate`].
-pub fn hausdorff_directed_3d(a: &[Point3D], b: &[Point3D]) -> Result<Distance, GeodistError> {
+pub fn hausdorff_directed_3d(a: &[Point3D], b: &[Point3D]) -> Result<HausdorffDirectedWitness, GeodistError> {
   hausdorff_directed_3d_on_ellipsoid(Ellipsoid::wgs84(), a, b)
 }
 
@@ -113,34 +200,30 @@ pub fn hausdorff_directed_3d_on_ellipsoid(
   ellipsoid: Ellipsoid,
   a: &[Point3D],
   b: &[Point3D],
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffDirectedWitness, GeodistError> {
   ensure_non_empty(a)?;
   ensure_non_empty(b)?;
   validate_points_3d(a)?;
   validate_points_3d(b)?;
   ellipsoid.validate()?;
 
-  let ecef_a = to_ecef_points(a, &ellipsoid)?;
-  let ecef_b = to_ecef_points(b, &ellipsoid)?;
+  let positioned_a = position_points_3d(a);
+  let positioned_b = position_points_3d(b);
+  let ecef_a = to_ecef_points(&positioned_a, &ellipsoid)?;
+  let ecef_b = to_ecef_points(&positioned_b, &ellipsoid)?;
 
-  let strategy = choose_strategy(a.len(), b.len());
-  let meters = match strategy {
-    HausdorffStrategy::Naive => hausdorff_directed_3d_naive(&ecef_a, &ecef_b),
-    HausdorffStrategy::Indexed => hausdorff_directed_3d_indexed(&ecef_a, &ecef_b),
-  };
-
-  Distance::from_meters(meters)
+  hausdorff_directed_3d_from_ecef(&ecef_a, &ecef_b)
 }
 
 /// Symmetric 3D Hausdorff distance between sets `a` and `b`.
 ///
 /// Computes the directed Hausdorff distance in both directions using the
-/// default ellipsoid and returns the larger of the two.
+/// default ellipsoid and returns the larger witness plus both legs.
 ///
 /// # Errors
 /// Returns [`GeodistError::EmptyPointSet`] when either slice is empty, or any
 /// validation error surfaced by [`Point3D::validate`].
-pub fn hausdorff_3d(a: &[Point3D], b: &[Point3D]) -> Result<Distance, GeodistError> {
+pub fn hausdorff_3d(a: &[Point3D], b: &[Point3D]) -> Result<HausdorffWitness, GeodistError> {
   hausdorff_3d_on_ellipsoid(Ellipsoid::wgs84(), a, b)
 }
 
@@ -151,11 +234,14 @@ pub fn hausdorff_3d(a: &[Point3D], b: &[Point3D]) -> Result<Distance, GeodistErr
 /// # Errors
 /// Propagates the same validation and empty-set errors as
 /// [`hausdorff_3d`].
-pub fn hausdorff_3d_on_ellipsoid(ellipsoid: Ellipsoid, a: &[Point3D], b: &[Point3D]) -> Result<Distance, GeodistError> {
+pub fn hausdorff_3d_on_ellipsoid(
+  ellipsoid: Ellipsoid,
+  a: &[Point3D],
+  b: &[Point3D],
+) -> Result<HausdorffWitness, GeodistError> {
   let forward = hausdorff_directed_3d_on_ellipsoid(ellipsoid, a, b)?;
   let reverse = hausdorff_directed_3d_on_ellipsoid(ellipsoid, b, a)?;
-  let meters = forward.meters().max(reverse.meters());
-  Distance::from_meters(meters)
+  HausdorffWitness::new(forward, reverse)
 }
 
 /// Directed Hausdorff distance after clipping both sets by a bounding box.
@@ -170,7 +256,7 @@ pub fn hausdorff_directed_clipped(
   a: &[Point],
   b: &[Point],
   bounding_box: BoundingBox,
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffDirectedWitness, GeodistError> {
   hausdorff_directed_clipped_with(&Spherical::default(), a, b, bounding_box)
 }
 
@@ -187,10 +273,15 @@ pub fn hausdorff_directed_clipped_with<A: GeodesicAlgorithm>(
   a: &[Point],
   b: &[Point],
   bounding_box: BoundingBox,
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffDirectedWitness, GeodistError> {
   let filtered_a = filter_points(a, &bounding_box);
   let filtered_b = filter_points(b, &bounding_box);
-  hausdorff_directed_with(algorithm, &filtered_a, &filtered_b)
+  ensure_non_empty(&filtered_a)?;
+  ensure_non_empty(&filtered_b)?;
+  validate_positioned_points(&filtered_a)?;
+  validate_positioned_points(&filtered_b)?;
+
+  hausdorff_directed_positioned_with(algorithm, &filtered_a, &filtered_b)
 }
 
 /// Symmetric Hausdorff distance after clipping both sets by a bounding box.
@@ -201,7 +292,11 @@ pub fn hausdorff_directed_clipped_with<A: GeodesicAlgorithm>(
 /// # Errors
 /// Returns [`GeodistError::EmptyPointSet`] when filtering removes all points
 /// from either slice, or any validation error surfaced by [`Point::validate`].
-pub fn hausdorff_clipped(a: &[Point], b: &[Point], bounding_box: BoundingBox) -> Result<Distance, GeodistError> {
+pub fn hausdorff_clipped(
+  a: &[Point],
+  b: &[Point],
+  bounding_box: BoundingBox,
+) -> Result<HausdorffWitness, GeodistError> {
   hausdorff_clipped_with(&Spherical::default(), a, b, bounding_box)
 }
 
@@ -219,10 +314,15 @@ pub fn hausdorff_clipped_with<A: GeodesicAlgorithm>(
   a: &[Point],
   b: &[Point],
   bounding_box: BoundingBox,
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffWitness, GeodistError> {
   let filtered_a = filter_points(a, &bounding_box);
   let filtered_b = filter_points(b, &bounding_box);
-  hausdorff_with(algorithm, &filtered_a, &filtered_b)
+  ensure_non_empty(&filtered_a)?;
+  ensure_non_empty(&filtered_b)?;
+  validate_positioned_points(&filtered_a)?;
+  validate_positioned_points(&filtered_b)?;
+
+  hausdorff_positioned(algorithm, &filtered_a, &filtered_b)
 }
 
 /// Directed 3D Hausdorff distance after clipping points to a bounding box.
@@ -238,7 +338,7 @@ pub fn hausdorff_directed_clipped_3d(
   a: &[Point3D],
   b: &[Point3D],
   bounding_box: BoundingBox,
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffDirectedWitness, GeodistError> {
   hausdorff_directed_clipped_3d_on_ellipsoid(Ellipsoid::wgs84(), a, b, bounding_box)
 }
 
@@ -256,10 +356,18 @@ pub fn hausdorff_directed_clipped_3d_on_ellipsoid(
   a: &[Point3D],
   b: &[Point3D],
   bounding_box: BoundingBox,
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffDirectedWitness, GeodistError> {
   let filtered_a = filter_points_3d(a, &bounding_box);
   let filtered_b = filter_points_3d(b, &bounding_box);
-  hausdorff_directed_3d_on_ellipsoid(ellipsoid, &filtered_a, &filtered_b)
+  ensure_non_empty(&filtered_a)?;
+  ensure_non_empty(&filtered_b)?;
+  validate_positioned_points_3d(&filtered_a)?;
+  validate_positioned_points_3d(&filtered_b)?;
+  ellipsoid.validate()?;
+
+  let ecef_a = to_ecef_points(&filtered_a, &ellipsoid)?;
+  let ecef_b = to_ecef_points(&filtered_b, &ellipsoid)?;
+  hausdorff_directed_3d_from_ecef(&ecef_a, &ecef_b)
 }
 
 /// Symmetric 3D Hausdorff distance after bounding box clipping.
@@ -271,7 +379,11 @@ pub fn hausdorff_directed_clipped_3d_on_ellipsoid(
 /// Returns [`GeodistError::EmptyPointSet`] when filtering removes all points
 /// from either slice, or any validation error surfaced by
 /// [`Point3D::validate`].
-pub fn hausdorff_clipped_3d(a: &[Point3D], b: &[Point3D], bounding_box: BoundingBox) -> Result<Distance, GeodistError> {
+pub fn hausdorff_clipped_3d(
+  a: &[Point3D],
+  b: &[Point3D],
+  bounding_box: BoundingBox,
+) -> Result<HausdorffWitness, GeodistError> {
   hausdorff_clipped_3d_on_ellipsoid(Ellipsoid::wgs84(), a, b, bounding_box)
 }
 
@@ -288,10 +400,21 @@ pub fn hausdorff_clipped_3d_on_ellipsoid(
   a: &[Point3D],
   b: &[Point3D],
   bounding_box: BoundingBox,
-) -> Result<Distance, GeodistError> {
+) -> Result<HausdorffWitness, GeodistError> {
   let filtered_a = filter_points_3d(a, &bounding_box);
   let filtered_b = filter_points_3d(b, &bounding_box);
-  hausdorff_3d_on_ellipsoid(ellipsoid, &filtered_a, &filtered_b)
+  ensure_non_empty(&filtered_a)?;
+  ensure_non_empty(&filtered_b)?;
+  validate_positioned_points_3d(&filtered_a)?;
+  validate_positioned_points_3d(&filtered_b)?;
+  ellipsoid.validate()?;
+
+  let ecef_a = to_ecef_points(&filtered_a, &ellipsoid)?;
+  let ecef_b = to_ecef_points(&filtered_b, &ellipsoid)?;
+
+  let forward = hausdorff_directed_3d_from_ecef(&ecef_a, &ecef_b)?;
+  let reverse = hausdorff_directed_3d_from_ecef(&ecef_b, &ecef_a)?;
+  HausdorffWitness::new(forward, reverse)
 }
 
 fn ensure_non_empty<T>(points: &[T]) -> Result<(), GeodistError> {
@@ -315,27 +438,70 @@ fn validate_points_3d(points: &[Point3D]) -> Result<(), GeodistError> {
   Ok(())
 }
 
-fn filter_points(points: &[Point], bounding_box: &BoundingBox) -> Vec<Point> {
+fn validate_positioned_points(points: &[Positioned<Point>]) -> Result<(), GeodistError> {
+  for positioned in points {
+    positioned.point.validate()?;
+  }
+  Ok(())
+}
+
+fn validate_positioned_points_3d(points: &[Positioned<Point3D>]) -> Result<(), GeodistError> {
+  for positioned in points {
+    positioned.point.validate()?;
+  }
+  Ok(())
+}
+
+fn position_points(points: &[Point]) -> Vec<Positioned<Point>> {
   points
     .iter()
     .copied()
-    .filter(|point| bounding_box.contains(point))
+    .enumerate()
+    .map(|(index, point)| Positioned { point, index })
     .collect()
 }
 
-fn filter_points_3d(points: &[Point3D], bounding_box: &BoundingBox) -> Vec<Point3D> {
+fn position_points_3d(points: &[Point3D]) -> Vec<Positioned<Point3D>> {
   points
     .iter()
     .copied()
-    .filter(|point| bounding_box.contains_3d(point))
+    .enumerate()
+    .map(|(index, point)| Positioned { point, index })
     .collect()
 }
 
-fn to_ecef_points(points: &[Point3D], ellipsoid: &Ellipsoid) -> Result<Vec<EcefPoint>, GeodistError> {
+fn filter_points(points: &[Point], bounding_box: &BoundingBox) -> Vec<Positioned<Point>> {
   points
     .iter()
     .copied()
-    .map(|point| geodetic_to_ecef(point, ellipsoid))
+    .enumerate()
+    .filter(|(_, point)| bounding_box.contains(point))
+    .map(|(index, point)| Positioned { point, index })
+    .collect()
+}
+
+fn filter_points_3d(points: &[Point3D], bounding_box: &BoundingBox) -> Vec<Positioned<Point3D>> {
+  points
+    .iter()
+    .copied()
+    .enumerate()
+    .filter(|(_, point)| bounding_box.contains_3d(point))
+    .map(|(index, point)| Positioned { point, index })
+    .collect()
+}
+
+fn to_ecef_points(
+  points: &[Positioned<Point3D>],
+  ellipsoid: &Ellipsoid,
+) -> Result<Vec<Positioned<EcefPoint>>, GeodistError> {
+  points
+    .iter()
+    .map(|positioned| {
+      geodetic_to_ecef(positioned.point, ellipsoid).map(|ecef| Positioned {
+        point: ecef,
+        index: positioned.index,
+      })
+    })
     .collect()
 }
 
@@ -353,100 +519,201 @@ fn should_use_naive(a_len: usize, b_len: usize) -> bool {
   min_size < MIN_INDEX_CANDIDATE_SIZE || cross_product <= MAX_NAIVE_CROSS_PRODUCT
 }
 
+fn hausdorff_directed_positioned_with<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  origins: &[Positioned<Point>],
+  candidates: &[Positioned<Point>],
+) -> Result<HausdorffDirectedWitness, GeodistError> {
+  ensure_non_empty(origins)?;
+  ensure_non_empty(candidates)?;
+
+  let strategy = choose_strategy(origins.len(), candidates.len());
+  let raw = match strategy {
+    HausdorffStrategy::Naive => hausdorff_directed_naive(algorithm, origins, candidates)?,
+    HausdorffStrategy::Indexed => hausdorff_directed_indexed(algorithm, origins, candidates)?,
+  };
+
+  HausdorffDirectedWitness::from_raw(raw)
+}
+
+fn hausdorff_positioned<A: GeodesicAlgorithm>(
+  algorithm: &A,
+  a: &[Positioned<Point>],
+  b: &[Positioned<Point>],
+) -> Result<HausdorffWitness, GeodistError> {
+  let forward = hausdorff_directed_positioned_with(algorithm, a, b)?;
+  let reverse = hausdorff_directed_positioned_with(algorithm, b, a)?;
+  HausdorffWitness::new(forward, reverse)
+}
+
+fn hausdorff_directed_3d_from_ecef(
+  origins: &[Positioned<EcefPoint>],
+  candidates: &[Positioned<EcefPoint>],
+) -> Result<HausdorffDirectedWitness, GeodistError> {
+  ensure_non_empty(origins)?;
+  ensure_non_empty(candidates)?;
+
+  let strategy = choose_strategy(origins.len(), candidates.len());
+  let raw = match strategy {
+    HausdorffStrategy::Naive => hausdorff_directed_3d_naive(origins, candidates),
+    HausdorffStrategy::Indexed => hausdorff_directed_3d_indexed(origins, candidates),
+  };
+
+  HausdorffDirectedWitness::from_raw(raw)
+}
+
 fn hausdorff_directed_naive<A: GeodesicAlgorithm>(
   algorithm: &A,
-  origins: &[Point],
-  candidates: &[Point],
-) -> Result<f64, GeodistError> {
-  let mut max_min: f64 = 0.0;
+  origins: &[Positioned<Point>],
+  candidates: &[Positioned<Point>],
+) -> Result<DirectedHausdorffMeters, GeodistError> {
+  let mut best: Option<DirectedHausdorffMeters> = None;
 
   for origin in origins {
-    let mut min_distance: f64 = f64::INFINITY;
+    let mut nearest: Option<(f64, usize)> = None;
     for candidate in candidates {
-      let meters = algorithm.geodesic_distance(*origin, *candidate)?.meters();
-      min_distance = min_distance.min(meters);
+      let meters = algorithm.geodesic_distance(origin.point, candidate.point)?.meters();
+      if nearest.is_none_or(|(current, _)| meters < current) {
+        nearest = Some((meters, candidate.index));
+      }
     }
-    max_min = max_min.max(min_distance);
+
+    let (min_distance, nearest_index) = nearest.expect("candidate set validated as non-empty");
+    let witness = DirectedHausdorffMeters {
+      meters: min_distance,
+      origin_index: origin.index,
+      candidate_index: nearest_index,
+    };
+
+    if best.is_none_or(|current| witness.meters > current.meters) {
+      best = Some(witness);
+    }
   }
 
-  Ok(max_min)
+  best.ok_or(GeodistError::EmptyPointSet)
 }
 
 fn hausdorff_directed_indexed<A: GeodesicAlgorithm>(
   algorithm: &A,
-  origins: &[Point],
-  candidates: &[Point],
-) -> Result<f64, GeodistError> {
+  origins: &[Positioned<Point>],
+  candidates: &[Positioned<Point>],
+) -> Result<DirectedHausdorffMeters, GeodistError> {
   let index = RTree::bulk_load(index_points(algorithm, candidates));
-  let mut max_min: f64 = 0.0;
+  let mut best: Option<DirectedHausdorffMeters> = None;
 
   for origin in origins {
-    let query = [origin.lon, origin.lat];
+    let query = [origin.point.lon, origin.point.lat];
     let nearest = index
       .nearest_neighbor(&query)
       .expect("candidate set validated as non-empty");
-    let meters = algorithm.geodesic_distance(*origin, nearest.point)?.meters();
-    max_min = max_min.max(meters);
+    let meters = algorithm.geodesic_distance(origin.point, nearest.point)?.meters();
+    let witness = DirectedHausdorffMeters {
+      meters,
+      origin_index: origin.index,
+      candidate_index: nearest.source_index,
+    };
+
+    if best.is_none_or(|current| witness.meters > current.meters) {
+      best = Some(witness);
+    }
   }
 
-  Ok(max_min)
+  best.ok_or(GeodistError::EmptyPointSet)
 }
 
 /// Directed 3D Hausdorff distance using a naive O(n*m) search.
 ///
 /// Iterates over every origin/candidate pair and returns the maximum of the
 /// per-origin nearest-neighbor distances measured in ECEF meters.
-fn hausdorff_directed_3d_naive(origins: &[EcefPoint], candidates: &[EcefPoint]) -> f64 {
-  let mut max_min: f64 = 0.0;
+fn hausdorff_directed_3d_naive(
+  origins: &[Positioned<EcefPoint>],
+  candidates: &[Positioned<EcefPoint>],
+) -> DirectedHausdorffMeters {
+  let mut best: Option<DirectedHausdorffMeters> = None;
 
   for origin in origins {
-    let mut min_distance: f64 = f64::INFINITY;
+    let mut nearest: Option<(f64, usize)> = None;
     for candidate in candidates {
-      let meters = origin.distance_to(*candidate);
-      min_distance = min_distance.min(meters);
+      let meters = origin.point.distance_to(candidate.point);
+      if nearest.is_none_or(|(current, _)| meters < current) {
+        nearest = Some((meters, candidate.index));
+      }
     }
-    max_min = max_min.max(min_distance);
+
+    let (min_distance, nearest_index) = nearest.expect("candidate set validated as non-empty");
+    let witness = DirectedHausdorffMeters {
+      meters: min_distance,
+      origin_index: origin.index,
+      candidate_index: nearest_index,
+    };
+
+    if best.is_none_or(|current| witness.meters > current.meters) {
+      best = Some(witness);
+    }
   }
 
-  max_min
+  best.expect("origin set validated as non-empty")
 }
 
 /// Directed 3D Hausdorff distance using an R-tree for nearest-neighbor lookup.
 ///
 /// Builds an index over the candidate set and queries the closest point for
 /// each origin, computing distances in ECEF meters.
-fn hausdorff_directed_3d_indexed(origins: &[EcefPoint], candidates: &[EcefPoint]) -> f64 {
+fn hausdorff_directed_3d_indexed(
+  origins: &[Positioned<EcefPoint>],
+  candidates: &[Positioned<EcefPoint>],
+) -> DirectedHausdorffMeters {
   let index = RTree::bulk_load(index_ecef_points(candidates));
-  let mut max_min: f64 = 0.0;
+  let mut best: Option<DirectedHausdorffMeters> = None;
 
   for origin in origins {
-    let query = [origin.x, origin.y, origin.z];
+    let query = [origin.point.x, origin.point.y, origin.point.z];
     let nearest = index
       .nearest_neighbor(&query)
       .expect("candidate set validated as non-empty");
-    let meters = origin.distance_to(nearest.point);
-    max_min = max_min.max(meters);
+    let meters = origin.point.distance_to(nearest.point);
+    let witness = DirectedHausdorffMeters {
+      meters,
+      origin_index: origin.index,
+      candidate_index: nearest.source_index,
+    };
+
+    if best.is_none_or(|current| witness.meters > current.meters) {
+      best = Some(witness);
+    }
   }
 
-  max_min
+  best.expect("origin set validated as non-empty")
 }
 
-fn index_points<'a, A: GeodesicAlgorithm>(algorithm: &'a A, points: &[Point]) -> Vec<IndexedPoint<'a, A>> {
+fn index_points<'a, A: GeodesicAlgorithm>(algorithm: &'a A, points: &[Positioned<Point>]) -> Vec<IndexedPoint<'a, A>> {
   points
     .iter()
     .copied()
-    .map(|point| IndexedPoint { algorithm, point })
+    .map(|positioned| IndexedPoint {
+      algorithm,
+      point: positioned.point,
+      source_index: positioned.index,
+    })
     .collect()
 }
 
-fn index_ecef_points(points: &[EcefPoint]) -> Vec<IndexedEcefPoint> {
-  points.iter().copied().map(|point| IndexedEcefPoint { point }).collect()
+fn index_ecef_points(points: &[Positioned<EcefPoint>]) -> Vec<IndexedEcefPoint> {
+  points
+    .iter()
+    .copied()
+    .map(|positioned| IndexedEcefPoint {
+      point: positioned.point,
+      source_index: positioned.index,
+    })
+    .collect()
 }
 
 #[derive(Clone, Copy)]
 struct IndexedPoint<'a, A> {
   algorithm: &'a A,
   point: Point,
+  source_index: usize,
 }
 
 impl<'a, A> RTreeObject for IndexedPoint<'a, A> {
@@ -477,6 +744,7 @@ impl<'a, A: GeodesicAlgorithm> PointDistance for IndexedPoint<'a, A> {
 #[derive(Clone, Copy)]
 struct IndexedEcefPoint {
   point: EcefPoint,
+  source_index: usize,
 }
 
 impl RTreeObject for IndexedEcefPoint {
@@ -505,7 +773,7 @@ mod tests {
     let b = a;
 
     let d = hausdorff(&a, &b).unwrap();
-    assert_eq!(d.meters(), 0.0);
+    assert_eq!(d.distance().meters(), 0.0);
   }
 
   #[test]
@@ -513,12 +781,36 @@ mod tests {
     let a = [Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 2.0).unwrap()];
     let b = [Point::new(0.0, 0.0).unwrap()];
 
-    let directed = hausdorff_directed(&a, &b).unwrap().meters();
+    let directed = hausdorff_directed(&a, &b).unwrap().distance().meters();
     let expected = geodesic_distance(a[1], b[0]).unwrap().meters();
     assert!((directed - expected).abs() < 1e-9);
 
-    let symmetric = hausdorff(&a, &b).unwrap().meters();
+    let symmetric = hausdorff(&a, &b).unwrap().distance().meters();
     assert_eq!(symmetric, directed);
+  }
+
+  #[test]
+  fn directed_witness_reports_indices() {
+    let far = Point::new(0.0, 2.0).unwrap();
+    let near = Point::new(0.0, 0.5).unwrap();
+    let candidate = Point::new(0.0, 0.0).unwrap();
+
+    let witness = hausdorff_directed(&[far, near], &[candidate]).unwrap();
+    assert_eq!(witness.origin_index(), 0);
+    assert_eq!(witness.candidate_index(), 0);
+  }
+
+  #[test]
+  fn symmetric_witness_captures_both_directions() {
+    let a = [Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 1.0).unwrap()];
+    let b = [Point::new(0.0, 0.0).unwrap()];
+
+    let witness = hausdorff(&a, &b).unwrap();
+    assert_eq!(witness.a_to_b().origin_index(), 1);
+    assert_eq!(witness.a_to_b().candidate_index(), 0);
+    assert_eq!(witness.b_to_a().origin_index(), 0);
+    assert_eq!(witness.b_to_a().candidate_index(), 0);
+    assert_eq!(witness.distance().meters(), witness.a_to_b().distance().meters());
   }
 
   #[test]
@@ -554,7 +846,7 @@ mod tests {
     let b = [Point::new(10.0, 10.0).unwrap()];
 
     let distance = hausdorff_with(&ZeroAlgorithm, &a, &b).unwrap();
-    assert_eq!(distance.meters(), 0.0);
+    assert_eq!(distance.distance().meters(), 0.0);
   }
 
   #[test]
@@ -564,7 +856,7 @@ mod tests {
       .map(|i| Point::new(0.0, i as f64 * 0.1 + 0.05).unwrap())
       .collect();
 
-    let distance = hausdorff_directed(&a, &b).unwrap().meters();
+    let distance = hausdorff_directed(&a, &b).unwrap().distance().meters();
     let expected = geodesic_distance(a[0], b[0]).unwrap().meters();
 
     assert!((distance - expected).abs() < 1e-6);
@@ -584,7 +876,7 @@ mod tests {
     let bounding_box = BoundingBox::new(-1.0, 1.0, -1.0, 1.0).unwrap();
 
     let distance = hausdorff_clipped(&[inside, outside], &[inside], bounding_box).unwrap();
-    assert_eq!(distance.meters(), 0.0);
+    assert_eq!(distance.distance().meters(), 0.0);
   }
 
   #[test]
@@ -597,6 +889,17 @@ mod tests {
   }
 
   #[test]
+  fn clipped_directed_preserves_original_indices() {
+    let inside = Point::new(0.0, 0.0).unwrap(); // index 0
+    let outside = Point::new(10.0, 10.0).unwrap(); // index 1
+    let bounding_box = BoundingBox::new(-1.0, 1.0, -1.0, 1.0).unwrap();
+
+    let witness = hausdorff_directed_clipped(&[inside, outside], &[inside], bounding_box).unwrap();
+    assert_eq!(witness.origin_index(), 0);
+    assert_eq!(witness.candidate_index(), 0);
+  }
+
+  #[test]
   fn identical_3d_sets_have_zero_distance() {
     let a = [
       Point3D::new(0.0, 0.0, 0.0).unwrap(),
@@ -605,7 +908,7 @@ mod tests {
     let b = a;
 
     let distance = hausdorff_3d(&a, &b).unwrap();
-    assert_eq!(distance.meters(), 0.0);
+    assert_eq!(distance.distance().meters(), 0.0);
   }
 
   #[test]
@@ -614,7 +917,7 @@ mod tests {
     let elevated = Point3D::new(0.0, 0.0, 500.0).unwrap();
 
     let directed = hausdorff_directed_3d(&[ground], &[elevated]).unwrap();
-    assert!((directed.meters() - 500.0).abs() < 1e-9);
+    assert!((directed.distance().meters() - 500.0).abs() < 1e-9);
   }
 
   #[test]
@@ -624,7 +927,7 @@ mod tests {
     let bounding_box = BoundingBox::new(-1.0, 1.0, -1.0, 1.0).unwrap();
 
     let distance = hausdorff_clipped_3d(&[inside, outside], &[inside], bounding_box).unwrap();
-    assert_eq!(distance.meters(), 0.0);
+    assert_eq!(distance.distance().meters(), 0.0);
   }
 
   #[test]
@@ -636,9 +939,21 @@ mod tests {
       .map(|i| Point3D::new(0.0, i as f64 * 0.1 + 0.05, 0.0).unwrap())
       .collect();
 
-    let distance = hausdorff_directed_3d(&a, &b).unwrap().meters();
+    let distance = hausdorff_directed_3d(&a, &b).unwrap().distance().meters();
     let expected = geodesic_distance_3d(a[0], b[0]).unwrap().meters();
 
     assert!((distance - expected).abs() < 1e-6);
+  }
+
+  #[test]
+  fn directed_3d_witness_reports_indices() {
+    let far = Point3D::new(0.0, 0.0, 100.0).unwrap();
+    let near = Point3D::new(0.0, 0.0, 10.0).unwrap();
+    let candidate = Point3D::new(0.0, 0.0, 0.0).unwrap();
+
+    let witness = hausdorff_directed_3d(&[far, near], &[candidate]).unwrap();
+    assert_eq!(witness.origin_index(), 0);
+    assert_eq!(witness.candidate_index(), 0);
+    assert!((witness.distance().meters() - 100.0).abs() < 1e-9);
   }
 }
