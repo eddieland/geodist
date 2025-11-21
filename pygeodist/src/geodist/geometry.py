@@ -261,8 +261,6 @@ class BoundingBox:
 
         if min_latitude > max_latitude:
             raise InvalidGeometryError(f"min_lat must not exceed max_lat: {min_latitude} > {max_latitude}")
-        if min_longitude > max_longitude:
-            raise InvalidGeometryError(f"min_lon must not exceed max_lon: {min_longitude} > {max_longitude}")
 
         self._handle = _geodist_rs.BoundingBox(
             min_latitude,

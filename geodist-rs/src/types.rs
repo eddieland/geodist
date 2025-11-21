@@ -30,8 +30,8 @@ pub enum GeodistError {
   /// Ellipsoid axes must be finite, positive, and ordered (semi-major >=
   /// semi-minor).
   InvalidEllipsoid { semi_major: f64, semi_minor: f64 },
-  /// Bounding boxes must have ordered corners within valid latitude/longitude
-  /// ranges.
+  /// Bounding boxes must have ordered latitudes within valid ranges. Longitudes
+  /// may wrap the antimeridian (`min_lon > max_lon`).
   InvalidBoundingBox {
     min_lat: f64,
     max_lat: f64,
@@ -91,7 +91,7 @@ impl fmt::Display for GeodistError {
         max_lon,
       } => write!(
         f,
-        "invalid bounding box [{min_lat}, {max_lat}] x [{min_lon}, {max_lon}]; expected ordered finite degrees"
+        "invalid bounding box [{min_lat}, {max_lat}] x [{min_lon}, {max_lon}]; expected finite degrees with min_lat <= max_lat and longitudes in [{MIN_LON_DEGREES}, {MAX_LON_DEGREES}]"
       ),
       Self::EmptyPointSet => write!(f, "point sets must be non-empty"),
       Self::MissingDensificationKnob => write!(
@@ -329,14 +329,15 @@ pub struct BoundingBox {
 }
 
 impl BoundingBox {
-  /// Construct a bounding box ensuring ordered corners inside valid ranges.
+  /// Construct a bounding box ensuring latitudes are ordered inside valid
+  /// ranges.
   pub fn new(min_lat: f64, max_lat: f64, min_lon: f64, max_lon: f64) -> Result<Self, GeodistError> {
     validate_latitude(min_lat)?;
     validate_latitude(max_lat)?;
     validate_longitude(min_lon)?;
     validate_longitude(max_lon)?;
 
-    if min_lat > max_lat || min_lon > max_lon {
+    if min_lat > max_lat {
       return Err(GeodistError::InvalidBoundingBox {
         min_lat,
         max_lat,
@@ -355,13 +356,30 @@ impl BoundingBox {
 
   /// Check whether a point lies inside the box (inclusive of edges).
   pub fn contains(&self, point: &Point) -> bool {
-    point.lat >= self.min_lat && point.lat <= self.max_lat && point.lon >= self.min_lon && point.lon <= self.max_lon
+    self.contains_lat(point.lat) && self.contains_lon(point.lon)
   }
 
   /// Check whether a 3D point lies inside the box using latitude/longitude
   /// only.
   pub fn contains_3d(&self, point: &Point3D) -> bool {
-    point.lat >= self.min_lat && point.lat <= self.max_lat && point.lon >= self.min_lon && point.lon <= self.max_lon
+    self.contains_lat(point.lat) && self.contains_lon(point.lon)
+  }
+
+  /// Return true when the bounding box crosses the antimeridian.
+  pub const fn wraps_antimeridian(&self) -> bool {
+    self.min_lon > self.max_lon
+  }
+
+  fn contains_lat(&self, lat: f64) -> bool {
+    lat >= self.min_lat && lat <= self.max_lat
+  }
+
+  fn contains_lon(&self, lon: f64) -> bool {
+    if !self.wraps_antimeridian() {
+      lon >= self.min_lon && lon <= self.max_lon
+    } else {
+      lon >= self.min_lon || lon <= self.max_lon
+    }
   }
 }
 
@@ -523,6 +541,15 @@ mod tests {
     let outside = Point::new(10.0, 0.0).unwrap();
     assert!(bbox.contains(&inside));
     assert!(!bbox.contains(&outside));
+  }
+
+  #[test]
+  fn bounding_box_accepts_antimeridian_wrap() {
+    let bbox = BoundingBox::new(-10.0, 10.0, 170.0, -170.0).unwrap();
+    assert!(bbox.wraps_antimeridian());
+    assert!(bbox.contains(&Point::new(0.0, 175.0).unwrap()));
+    assert!(bbox.contains(&Point::new(0.0, -175.0).unwrap()));
+    assert!(!bbox.contains(&Point::new(0.0, -90.0).unwrap()));
   }
 
   #[test]

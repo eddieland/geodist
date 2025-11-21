@@ -58,6 +58,39 @@ impl FlattenedPolyline {
   pub fn part_offsets(&self) -> &[usize] {
     &self.part_offsets
   }
+
+  /// Clip samples to a bounding box while preserving part offsets.
+  ///
+  /// Empty outputs return [`GeodistError::EmptyPointSet`].
+  pub fn clip(&self, bounding_box: &crate::BoundingBox) -> Result<Self, GeodistError> {
+    let mut filtered = Vec::new();
+    let mut offsets = Vec::with_capacity(self.part_offsets.len());
+    offsets.push(0);
+    let mut running_total = 0usize;
+
+    for window in self.part_offsets.windows(2) {
+      let start = window[0];
+      let end = window[1];
+      let part_slice = &self.samples[start..end];
+      let mut kept: Vec<Point> = part_slice
+        .iter()
+        .copied()
+        .filter(|point| bounding_box.contains(point))
+        .collect();
+      running_total += kept.len();
+      offsets.push(running_total);
+      filtered.append(&mut kept);
+    }
+
+    if filtered.is_empty() {
+      return Err(GeodistError::EmptyPointSet);
+    }
+
+    Ok(Self {
+      samples: filtered,
+      part_offsets: offsets,
+    })
+  }
 }
 
 /// Densify a single polyline into ordered samples.
@@ -389,5 +422,31 @@ mod tests {
     let flattened = densify_multiline(&[part_a, part_b], options).unwrap();
     assert_eq!(flattened.part_offsets(), &[0, 2, 4]);
     assert_eq!(flattened.samples().len(), 4);
+  }
+
+  #[test]
+  fn clipped_multiline_preserves_offsets_and_empties_error() {
+    let part_a = vec![
+      Point::new(0.0, 0.0).unwrap(),
+      Point::new(0.0, 0.001).unwrap(),
+      Point::new(0.0, 0.002).unwrap(),
+    ];
+    let part_b = vec![Point::new(10.0, 0.0).unwrap(), Point::new(10.0, 0.001).unwrap()];
+
+    let options = DensificationOptions {
+      max_segment_length_m: Some(1_000.0),
+      max_segment_angle_deg: None,
+      sample_cap: 50_000,
+    };
+    let flattened = densify_multiline(&[part_a, part_b], options).unwrap();
+    let bbox = crate::BoundingBox::new(-1.0, 1.0, -1.0, 1.0).unwrap();
+    let clipped = flattened.clip(&bbox).unwrap();
+
+    assert_eq!(clipped.part_offsets(), &[0, 3, 3]);
+    assert_eq!(clipped.samples().len(), 3);
+
+    let empty_box = crate::BoundingBox::new(-1.0, 1.0, 50.0, 60.0).unwrap();
+    let result = clipped.clip(&empty_box);
+    assert!(matches!(result, Err(GeodistError::EmptyPointSet)));
   }
 }

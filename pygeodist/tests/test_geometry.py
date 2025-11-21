@@ -101,12 +101,14 @@ def test_bounding_box_accepts_ordered_coordinates() -> None:
     assert bbox.to_tuple() == (-10.0, 10.0, -20.0, 20.0)
 
 
+def test_bounding_box_accepts_antimeridian_wrap() -> None:
+    bbox = BoundingBox(-5.0, 5.0, 170.0, -170.0)
+    assert bbox.to_tuple() == (-5.0, 5.0, 170.0, -170.0)
+
+
 def test_bounding_box_rejects_invalid_ranges() -> None:
     with pytest.raises(InvalidGeometryError):
         BoundingBox(10.0, -10.0, -20.0, 20.0)
-
-    with pytest.raises(InvalidGeometryError):
-        BoundingBox(-10.0, 10.0, 20.0, -20.0)
 
 
 def test_bounding_box_rejects_bool_inputs() -> None:
