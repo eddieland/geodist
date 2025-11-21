@@ -226,22 +226,18 @@ jobs:
           - os: ubuntu-latest
             python-version: "3.10"
             target: x86_64-unknown-linux-gnu
-            manylinux: manylinux_2_28
             python-abi: cp310-cp310
           - os: ubuntu-latest
             python-version: "3.11"
             target: x86_64-unknown-linux-gnu
-            manylinux: manylinux_2_28
             python-abi: cp311-cp311
           - os: ubuntu-latest
             python-version: "3.12"
             target: x86_64-unknown-linux-gnu
-            manylinux: manylinux_2_28
             python-abi: cp312-cp312
           - os: ubuntu-latest
             python-version: "3.13"
             target: x86_64-unknown-linux-gnu
-            manylinux: manylinux_2_28
             python-abi: cp313-cp313
           # macOS and Windows builds temporarily disabled for faster iteration
     env:
