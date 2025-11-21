@@ -1,5 +1,7 @@
 # CI Publishing Pipeline with Dry-Run Guard
 
+**Status:** ✅ Done (CI publishing MVP documented; outstanding namespace/notification tasks deferred)
+
 ## Purpose
 
 - Stand up a CI-driven release path that builds the Rust crate and Python wheels from GitHub Actions while keeping releases safe during the private-repo phase.
@@ -36,9 +38,9 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 | P0 | Add validation gates | Run lint/tests for Rust and Python before packaging; block release on failures | Align with `make lint`/`make test` targets where possible | ✅ |
 | P1 | Define flip-to-live controls | Single env flag/input to toggle uploads; guard against uploads when secrets absent | Document required secrets and safety checks | ✅ |
 | P1 | Wire upload steps (gated) | Add crates.io and PyPI publish steps behind flip flag and secrets | Use trusted publishing/oidc if feasible; otherwise token inputs | ✅ |
-| P1 | Confirm/prepare registry namespaces | Reserve crates.io crate name and create PyPI (or test.pypi) project; document ownership and access | Default to GitHub Actions trusted publishing (OIDC); avoid long-lived tokens | 📝 |
+| P1 | Confirm/prepare registry namespaces | Reserve crates.io crate name and create PyPI (or test.pypi) project; document ownership and access | Default to GitHub Actions trusted publishing (OIDC); avoid long-lived tokens | ⏸️ |
 | P2 | Document operator runbook | Update README/docs with how to tag, toggle, and verify artifacts | Include pointers to artifacts and rollback steps | ✅ |
-| P3 | Post-publish notifications | Optional Slack/email release summary hooked to live publishes | Non-blocking; only after public release | 📝 |
+| P3 | Post-publish notifications | Optional Slack/email release summary hooked to live publishes | Non-blocking; only after public release | ⏸️ |
 
 _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
@@ -58,7 +60,7 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 ## Status Tracking (to be updated by subagent)
 
 - **Latest completed task:** _Dry-run tag workflow, cross-platform wheel builds, and live upload guards/testing gates landed._
-- **Next up:** _Confirm crates.io/PyPI namespace readiness and plan notification wiring for public releases._
+- **Next up:** _Document marked done; remaining CI publishing MVP tasks deferred beyond initial release._
 
 ## Lessons Learned (ongoing)
 

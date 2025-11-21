@@ -11,6 +11,14 @@ This directory contains software specifications and technical documentation, lar
 
 When a spec changes status, move the file to the corresponding subfolder in the same PR that updates its `Status` field and content.
 
+## Marking a spec done
+
+- Set any remaining tasks in the backlog to their final state (e.g., ✅ done or ⏸️ deferred) and refresh status notes/lessons to reflect completion.
+- Update the document's status section (`Latest completed task`/`Next up` or similar) so it no longer implies active work.
+- Move the file from `proposed/` to `accepted/` (or from `accepted/` to `obsolete/` if being retired) in the same change.
+- Keep the filename unchanged when moving; only adjust the directory.
+- Add a status banner near the top of the document using the established emoji style (e.g., `**Status:** ✅ Done (...)` for completed specs).
+
 ## Purpose
 
 These specifications serve as:
@@ -37,11 +45,11 @@ YYYY-MM-DD_descriptive-name.md
 
 ### Examples
 
-- `2025-10-30_github-data-client-plan.md` - Initial plan for GitHub data client
-- `2025-10-30_authentication-spec.md` - Authentication implementation specification
-- `2025-11-01_api-design-checkpoint.md` - Checkpoint after API design phase
-- `2025-11-02_testing-strategy.md` - Testing approach and strategy
-- `2025-11-05_lessons-learned-sprint-1.md` - Retrospective document
+- [2025-11-19_github-actions-ci.md](accepted/2025-11-19_github-actions-ci.md) - Full CI bootstrap with matrices and guardrails; good pattern for automation specs.
+- [2025-11-19_python-package-structure.md](accepted/2025-11-19_python-package-structure.md) - Cross-language package/API layout; shows how to capture public surface and type expectations.
+- [2025-11-19_pyo3-integration-plan.md](accepted/2025-11-19_pyo3-integration-plan.md) - Rust/Python binding strategy; example of dependency and tooling alignment details.
+- [2025-11-19_rust-mvp-algorithm.md](accepted/2025-11-19_rust-mvp-algorithm.md) - Kernel-level algorithm spec with risks/backlog; blueprint for core logic work.
+- [2025-11-20_witness-points-hausdorff.md](accepted/2025-11-20_witness-points-hausdorff.md) - Feature spec covering behavior, tests, and follow-on perf work; good model for end-to-end additions.
 
 ### Benefits
 
