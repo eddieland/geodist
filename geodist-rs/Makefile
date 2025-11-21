@@ -47,24 +47,6 @@ watch-test: ## Run tests in watch mode (requires cargo-watch)
 .PHONY: all
 all: fmt lint test ## Run fmt, lint, and test
 
-### Snapshot Testing
-
-.PHONY: insta-review
-insta-review: ## Review Insta snapshots
-	cargo insta review --workspace
-
-.PHONY: insta-accept
-insta-accept: ## Accept all pending Insta snapshots
-	cargo insta accept --workspace
-
-.PHONY: insta-reject
-insta-reject: ## Reject all pending Insta snapshots
-	cargo insta reject --workspace
-
-.PHONY: update-snapshots
-update-snapshots: ## Run tests and update snapshots
-	INSTA_UPDATE=1 cargo nextest run --workspace
-
 ### Coverage
 
 .PHONY: coverage
