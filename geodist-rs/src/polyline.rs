@@ -284,7 +284,7 @@ fn interpolate_segment(start: Point, end: Point, central_angle_rad: f64, split_c
   points
 }
 
-fn collapse_duplicates(vertices: &[Point]) -> Vec<Point> {
+pub(crate) fn collapse_duplicates(vertices: &[Point]) -> Vec<Point> {
   let mut deduped = Vec::with_capacity(vertices.len());
   let mut last: Option<Point> = None;
 

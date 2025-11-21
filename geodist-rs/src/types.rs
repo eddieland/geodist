@@ -138,6 +138,13 @@ impl fmt::Display for GeodistError {
   }
 }
 
+/// Ring orientation helpers for polygon validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RingOrientation {
+  Clockwise,
+  CounterClockwise,
+}
+
 impl std::error::Error for GeodistError {}
 
 /// Geographic position in degrees.

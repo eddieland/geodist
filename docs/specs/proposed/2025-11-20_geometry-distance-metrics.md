@@ -88,7 +88,7 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 | P0 | Specify Hausdorff + Chamfer APIs and witness payloads for polylines | Function signatures, reduction modes, tie-break rules, and `_geodist_rs.pyi` shape captured; matches current point Hausdorff contract | Enables early Rust/Python delivery on polylines | ✅ |
 | P0 | Add end-to-end MultiLineString acceptance | Validation + sampling rules defined; witness shape records part indices; tests/fixtures sketched for LineString + MultiLineString parity | Delivers the first “additional data type” increment | ✅ |
 | P0 | Define clipping behavior for polyline metrics | Bbox rules, antimeridian handling, and empty-geometry failures documented with examples | Keeps first wave auditable | ✅ |
-| P1 | Ring validation + densification for Polygon/MultiPolygon (boundary-only) | Closure/orientation/containment checks and sampling defaults captured; explicit note that interior coverage is deferred | Unblocks perimeter-only distances as a second increment | 📝 |
+| P1 | Ring validation + densification for Polygon/MultiPolygon (boundary-only) | Closure/orientation/containment checks and sampling defaults captured; explicit note that interior coverage is deferred | Unblocks perimeter-only distances as a second increment | ✅ |
 | P1 | Polygon boundary Hausdorff/Chamfer witness + API shape | Witness payloads and tie-breaks defined; `_geodist_rs.pyi` updates described; fixtures outlined | Builds on polyline work before interior fill | 📝 |
 | P1 | Draft polyline-focused test matrix | Golden cases for multi-part polylines, crossing lines, and clipped evaluations; tolerances stated | Guards early delivery | 📝 |
 | P2 | Extend to interior coverage grids + Fréchet semantics across polygons | Grid seeding and Fréchet traversal rules documented; perf/complexity notes updated | Activates filled-area accuracy | 📝 |
@@ -111,8 +111,8 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Add end-to-end MultiLineString acceptance._
-- **Next up:** _Ring validation + densification for Polygon/MultiPolygon (boundary-only)._
+- **Latest completed task:** _Ring validation + densification for Polygon/MultiPolygon (boundary-only)._
+- **Next up:** _Polygon boundary Hausdorff/Chamfer witness + API shape._
 
 ## Lessons Learned (ongoing)
 
