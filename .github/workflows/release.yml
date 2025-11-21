@@ -234,15 +234,47 @@ jobs:
             target: x86_64-unknown-linux-gnu
             manylinux: manylinux2014
           - os: ubuntu-latest
+            python-version: "3.11"
+            target: x86_64-unknown-linux-gnu
+            manylinux: manylinux2014
+          - os: ubuntu-latest
             python-version: "3.12"
             target: x86_64-unknown-linux-gnu
             manylinux: manylinux2014
+          - os: ubuntu-latest
+            python-version: "3.13"
+            target: x86_64-unknown-linux-gnu
+            manylinux: manylinux2014
+          - os: macos-14
+            python-version: "3.10"
+            target: aarch64-apple-darwin
+            manylinux: ""
+          - os: macos-14
+            python-version: "3.11"
+            target: aarch64-apple-darwin
+            manylinux: ""
           - os: macos-14
             python-version: "3.12"
             target: aarch64-apple-darwin
             manylinux: ""
+          - os: macos-14
+            python-version: "3.13"
+            target: aarch64-apple-darwin
+            manylinux: ""
+          - os: macos-13
+            python-version: "3.10"
+            target: x86_64-apple-darwin
+            manylinux: ""
+          - os: macos-13
+            python-version: "3.11"
+            target: x86_64-apple-darwin
+            manylinux: ""
           - os: macos-13
             python-version: "3.12"
+            target: x86_64-apple-darwin
+            manylinux: ""
+          - os: macos-13
+            python-version: "3.13"
             target: x86_64-apple-darwin
             manylinux: ""
           - os: windows-latest
@@ -250,7 +282,15 @@ jobs:
             target: x86_64-pc-windows-msvc
             manylinux: ""
           - os: windows-latest
+            python-version: "3.11"
+            target: x86_64-pc-windows-msvc
+            manylinux: ""
+          - os: windows-latest
             python-version: "3.12"
+            target: x86_64-pc-windows-msvc
+            manylinux: ""
+          - os: windows-latest
+            python-version: "3.13"
             target: x86_64-pc-windows-msvc
             manylinux: ""
     env:
@@ -285,7 +325,7 @@ jobs:
           container: "quay.io/pypa/manylinux2014_x86_64:latest"
 
       - name: Build source distribution
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
