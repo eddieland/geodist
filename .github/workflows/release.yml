@@ -319,6 +319,25 @@ jobs:
       - name: Remove stale compiled extensions
         run: python .github/scripts/remove_stale_extensions.py
 
+      - name: Prepare dist directory
+        working-directory: pygeodist
+        run: |
+          rm -rf dist
+          mkdir -p dist
+
+      - name: Build source distribution
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          maturin-version: latest
+          rust-toolchain: nightly
+          manylinux: manylinux_2_28
+          working-directory: pygeodist
+          args: >-
+            --out dist
+          sccache: "true"
+
       - name: Build wheel
         if: matrix.os == 'ubuntu-latest'
         uses: PyO3/maturin-action@v1
@@ -334,20 +353,6 @@ jobs:
             --out dist
             --interpreter /opt/python/${{ matrix.python-abi }}/bin/python
           sccache: "true"
-
-      - name: Build source distribution
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          maturin-version: latest
-          rust-toolchain: nightly
-          manylinux: manylinux_2_28
-          working-directory: pygeodist
-          args: >-
-            --out dist
-          sccache: "true"
-          container: "quay.io/pypa/manylinux2014_x86_64:latest"
 
       - name: Build wheel
         if: matrix.os != 'ubuntu-latest'
