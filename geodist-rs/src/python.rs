@@ -1,4 +1,4 @@
-//! PyO3 module exposing minimal bindings for smoke testing.
+//! PyO3 module exposing geodist-rs functionality to Python.
 //!
 //! PyO3 compiles this crate into a CPython extension and wires Rust
 //! functions into a Python module via the `#[pymodule]` entrypoint; see
@@ -7,12 +7,16 @@
 //! Keep bindings in sync: any changes here must be mirrored in
 //! `pygeodist/src/geodist/_geodist_rs.pyi` in the same commit.
 #![allow(unsafe_op_in_unsafe_fn)]
+use geographiclib_rs::{
+  Geodesic as GeographicGeodesic, InverseGeodesic, PolygonArea as GeographicPolygonArea, Winding,
+};
+use pyo3::buffer::{PyBuffer, ReadOnlyCell};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use pyo3::{PyErr, create_exception, wrap_pyfunction};
 
-use crate::constants::EARTH_RADIUS_METERS;
+use crate::constants::{EARTH_RADIUS_METERS, MAX_LAT_DEGREES, MAX_LON_DEGREES, MIN_LAT_DEGREES, MIN_LON_DEGREES};
 use crate::{distance, hausdorff as hausdorff_kernel, polygon as polygon_kernel, polyline, types};
 
 type RingTuple = Vec<(f64, f64)>;
@@ -27,6 +31,7 @@ create_exception!(_geodist_rs, InvalidEllipsoidError, GeodistError);
 create_exception!(_geodist_rs, InvalidBoundingBoxError, GeodistError);
 create_exception!(_geodist_rs, EmptyPointSetError, GeodistError);
 create_exception!(_geodist_rs, InvalidPolygonError, GeodistError);
+create_exception!(_geodist_rs, InvalidGeometryError, GeodistError);
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone)]
@@ -585,6 +590,616 @@ fn hausdorff_polygon_boundary(
     .map_err(map_geodist_error)
 }
 
+#[derive(Debug, Clone)]
+struct LatLonBuffers {
+  lat: Vec<f64>,
+  lon: Vec<f64>,
+}
+
+fn extract_float_buffer<'py, T>(py: Python<'py>, obj: &Bound<'py, PyAny>, name: &str) -> PyResult<Option<Vec<f64>>>
+where
+  T: pyo3::buffer::Element + Copy + Into<f64>,
+{
+  if let Ok(buffer) = PyBuffer::<T>::get(obj) {
+    if buffer.dimensions() > 1 || !buffer.is_c_contiguous() {
+      return Err(PyValueError::new_err(format!(
+        "{name} must be a contiguous 1-D buffer, got {} dimensions",
+        buffer.dimensions()
+      )));
+    }
+
+    if let Some(slice) = buffer.as_slice(py) {
+      let values: Vec<f64> = slice.iter().map(ReadOnlyCell::get).map(Into::into).collect();
+      return Ok(Some(values));
+    }
+
+    return Err(PyValueError::new_err(format!("{name} must expose a readable buffer")));
+  }
+
+  Ok(None)
+}
+
+/// Extract a vector of f64 values from a Python object, attempting to read
+/// from a buffer first, then falling back to sequence extraction.
+///
+/// Arguments:
+/// - `py`: Python GIL token.
+/// - `obj`: Python object to extract from.
+/// - `name`: Name for error reporting.
+///
+/// Returns:
+/// - `Ok(Vec<f64>)` if extraction is successful.
+/// - `Err(PyErr)` if extraction fails.
+fn extract_f64_vector(py: Python<'_>, obj: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<f64>> {
+  if let Some(values) = extract_float_buffer::<f64>(py, obj, name)? {
+    return Ok(values);
+  }
+
+  if let Some(values) = extract_float_buffer::<f32>(py, obj, name)? {
+    return Ok(values);
+  }
+
+  obj.extract::<Vec<f64>>()
+}
+
+/// Validate latitude/longitude ranges for a single point.
+///
+/// Latitude must be in [-90.0, 90.0] and longitude in [-180.0, 180.0]. These
+/// invariants are enforced to ensure that geographic computations behave
+/// correctly.
+///
+/// Arguments:
+/// - `lat`: Latitude in degrees.
+/// - `lon`: Longitude in degrees.
+/// - `index`: Index of the point in the input array for error reporting.
+///
+/// Returns:
+/// - `Ok(())` if the latitude and longitude are valid.
+/// - `Err(PyErr)` if the latitude or longitude are invalid.
+fn validate_lat_lon(lat: f64, lon: f64, index: usize) -> PyResult<()> {
+  if !lat.is_finite() {
+    return Err(InvalidGeometryError::new_err(format!(
+      "index {index}: latitude must be finite, got {lat}"
+    )));
+  }
+
+  if !(MIN_LAT_DEGREES..=MAX_LAT_DEGREES).contains(&lat) {
+    return Err(InvalidGeometryError::new_err(format!(
+      "index {index}: latitude {lat} outside [{MIN_LAT_DEGREES}, {MAX_LAT_DEGREES}]"
+    )));
+  }
+
+  if !lon.is_finite() {
+    return Err(InvalidGeometryError::new_err(format!(
+      "index {index}: longitude must be finite, got {lon}"
+    )));
+  }
+
+  if !(MIN_LON_DEGREES..=MAX_LON_DEGREES).contains(&lon) {
+    return Err(InvalidGeometryError::new_err(format!(
+      "index {index}: longitude {lon} outside [{MIN_LON_DEGREES}, {MAX_LON_DEGREES}]"
+    )));
+  }
+
+  Ok(())
+}
+
+/// Given latitude and longitude objects from Python, extract their values
+/// into vectors and validate them.
+///
+/// Arguments:
+/// - `py`: Python GIL token.
+/// - `lat_obj`: Python object representing latitudes.
+/// - `lon_obj`: Python object representing longitudes.
+/// - `name`: Base name for error reporting.
+///
+/// Returns:
+/// - `Ok(LatLonBuffers)` containing the extracted latitude and longitude
+///   vectors if successful.
+/// - `Err(PyErr)` if extraction or validation fails.
+fn load_lat_lon_buffers(
+  py: Python<'_>,
+  lat_obj: &Bound<'_, PyAny>,
+  lon_obj: &Bound<'_, PyAny>,
+  name: &str,
+) -> PyResult<LatLonBuffers> {
+  let lat = extract_f64_vector(py, lat_obj, &format!("{name}.lat"))?;
+  let lon = extract_f64_vector(py, lon_obj, &format!("{name}.lon"))?;
+
+  if lat.len() != lon.len() {
+    return Err(PyValueError::new_err(format!(
+      "{name}.lat and {name}.lon must have equal length, got {} and {}",
+      lat.len(),
+      lon.len()
+    )));
+  }
+
+  for (index, (&lat_value, &lon_value)) in lat.iter().zip(&lon).enumerate() {
+    validate_lat_lon(lat_value, lon_value, index)?;
+  }
+
+  Ok(LatLonBuffers { lat, lon })
+}
+
+fn ellipsoid_axes(ellipsoid: Option<&Ellipsoid>) -> PyResult<Option<(f64, f64)>> {
+  if let Some(model) = ellipsoid {
+    let out = map_to_ellipsoid(model)?;
+    return Ok(Some((out.semi_major_axis_m, out.semi_minor_axis_m)));
+  }
+
+  Ok(None)
+}
+
+const fn default_ellipsoid_axes() -> (f64, f64) {
+  let default = types::Ellipsoid::wgs84();
+  (default.semi_major_axis_m, default.semi_minor_axis_m)
+}
+
+#[pyfunction]
+fn geodesic_distance_batch(
+  py: Python<'_>,
+  origins_lat: &Bound<'_, PyAny>,
+  origins_lon: &Bound<'_, PyAny>,
+  destinations_lat: &Bound<'_, PyAny>,
+  destinations_lon: &Bound<'_, PyAny>,
+  ellipsoid: Option<&Ellipsoid>,
+) -> PyResult<Vec<f64>> {
+  let origins = load_lat_lon_buffers(py, origins_lat, origins_lon, "origins")?;
+  let destinations = load_lat_lon_buffers(py, destinations_lat, destinations_lon, "destinations")?;
+
+  if origins.lat.len() != destinations.lat.len() {
+    return Err(PyValueError::new_err(format!(
+      "origins and destinations must share length, got {} and {}",
+      origins.lat.len(),
+      destinations.lat.len()
+    )));
+  }
+
+  let count = origins.lat.len();
+  if count == 0 {
+    return Ok(Vec::new());
+  }
+
+  let ellipsoid_axes = ellipsoid_axes(ellipsoid)?;
+
+  #[allow(deprecated)]
+  let distances = py.allow_threads(|| -> PyResult<Vec<f64>> {
+    match ellipsoid_axes {
+      Some((semi_major, semi_minor)) => {
+        let flattening = 1.0 - (semi_minor / semi_major);
+        let geodesic = GeographicGeodesic::new(semi_major, flattening);
+        let mut out = Vec::with_capacity(count);
+        for idx in 0..count {
+          let meters = geodesic.inverse(
+            origins.lat[idx],
+            origins.lon[idx],
+            destinations.lat[idx],
+            destinations.lon[idx],
+          );
+          out.push(meters);
+        }
+        Ok(out)
+      }
+      None => {
+        let mut out = Vec::with_capacity(count);
+        for idx in 0..count {
+          let (meters, _, _) = distance::spherical_distance_and_bearings(
+            origins.lat[idx],
+            origins.lon[idx],
+            destinations.lat[idx],
+            destinations.lon[idx],
+          );
+          out.push(meters);
+        }
+        Ok(out)
+      }
+    }
+  })?;
+
+  Ok(distances)
+}
+
+#[pyfunction]
+fn geodesic_with_bearings_batch(
+  py: Python<'_>,
+  origins_lat: &Bound<'_, PyAny>,
+  origins_lon: &Bound<'_, PyAny>,
+  destinations_lat: &Bound<'_, PyAny>,
+  destinations_lon: &Bound<'_, PyAny>,
+  ellipsoid: Option<&Ellipsoid>,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+  let origins = load_lat_lon_buffers(py, origins_lat, origins_lon, "origins")?;
+  let destinations = load_lat_lon_buffers(py, destinations_lat, destinations_lon, "destinations")?;
+
+  if origins.lat.len() != destinations.lat.len() {
+    return Err(PyValueError::new_err(format!(
+      "origins and destinations must share length, got {} and {}",
+      origins.lat.len(),
+      destinations.lat.len()
+    )));
+  }
+
+  let count = origins.lat.len();
+  if count == 0 {
+    return Ok((Vec::new(), Vec::new(), Vec::new()));
+  }
+
+  let ellipsoid_axes = ellipsoid_axes(ellipsoid)?;
+
+  #[allow(deprecated)]
+  let (distances, initials, finals) = py.allow_threads(|| -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+    match ellipsoid_axes {
+      Some((semi_major, semi_minor)) => {
+        let flattening = 1.0 - (semi_minor / semi_major);
+        let geodesic = GeographicGeodesic::new(semi_major, flattening);
+
+        let mut distances = Vec::with_capacity(count);
+        let mut initials = Vec::with_capacity(count);
+        let mut finals = Vec::with_capacity(count);
+
+        for idx in 0..count {
+          let (meters, initial, final_bearing, _) = geodesic.inverse(
+            origins.lat[idx],
+            origins.lon[idx],
+            destinations.lat[idx],
+            destinations.lon[idx],
+          );
+          distances.push(meters);
+          initials.push(distance::normalize_bearing(initial));
+          finals.push(distance::normalize_bearing(final_bearing));
+        }
+
+        Ok((distances, initials, finals))
+      }
+      None => {
+        let mut distances = Vec::with_capacity(count);
+        let mut initials = Vec::with_capacity(count);
+        let mut finals = Vec::with_capacity(count);
+
+        for idx in 0..count {
+          let (meters, initial, final_bearing) = distance::spherical_distance_and_bearings(
+            origins.lat[idx],
+            origins.lon[idx],
+            destinations.lat[idx],
+            destinations.lon[idx],
+          );
+          distances.push(meters);
+          initials.push(initial);
+          finals.push(final_bearing);
+        }
+
+        Ok((distances, initials, finals))
+      }
+    }
+  })?;
+
+  Ok((distances, initials, finals))
+}
+
+#[pyfunction]
+fn geodesic_distance_to_many(
+  py: Python<'_>,
+  origin_lat: f64,
+  origin_lon: f64,
+  destinations_lat: &Bound<'_, PyAny>,
+  destinations_lon: &Bound<'_, PyAny>,
+  ellipsoid: Option<&Ellipsoid>,
+) -> PyResult<Vec<f64>> {
+  validate_lat_lon(origin_lat, origin_lon, 0)?;
+  let destinations = load_lat_lon_buffers(py, destinations_lat, destinations_lon, "destinations")?;
+  let count = destinations.lat.len();
+
+  if count == 0 {
+    return Ok(Vec::new());
+  }
+
+  let ellipsoid_axes = ellipsoid_axes(ellipsoid)?;
+  let distances = py.detach(|| -> PyResult<Vec<f64>> {
+    match ellipsoid_axes {
+      Some((semi_major, semi_minor)) => {
+        let flattening = 1.0 - (semi_minor / semi_major);
+        let geodesic = GeographicGeodesic::new(semi_major, flattening);
+        let mut out = Vec::with_capacity(count);
+
+        for idx in 0..count {
+          let meters = geodesic.inverse(origin_lat, origin_lon, destinations.lat[idx], destinations.lon[idx]);
+          out.push(meters);
+        }
+
+        Ok(out)
+      }
+      None => {
+        let mut out = Vec::with_capacity(count);
+        for idx in 0..count {
+          let (meters, _, _) = distance::spherical_distance_and_bearings(
+            origin_lat,
+            origin_lon,
+            destinations.lat[idx],
+            destinations.lon[idx],
+          );
+          out.push(meters);
+        }
+        Ok(out)
+      }
+    }
+  })?;
+
+  Ok(distances)
+}
+
+/// Extract a monotonic offset vector from Python buffers or sequences.
+///
+/// Supports `usize`/`i64` contiguous buffers to avoid copies, falling back
+/// to sequence extraction. Negative values are rejected for signed buffers.
+fn extract_offsets(py: Python<'_>, obj: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<usize>> {
+  if let Ok(buffer) = PyBuffer::<usize>::get(obj) {
+    if buffer.dimensions() > 1 || !buffer.is_c_contiguous() {
+      return Err(PyValueError::new_err(format!(
+        "{name} must be a contiguous 1-D integer buffer, got {} dimensions",
+        buffer.dimensions()
+      )));
+    }
+
+    if let Some(slice) = buffer.as_slice(py) {
+      return Ok(slice.iter().map(ReadOnlyCell::get).collect());
+    }
+
+    return Err(PyValueError::new_err(format!("{name} must expose a readable buffer")));
+  }
+
+  if let Ok(buffer) = PyBuffer::<i64>::get(obj) {
+    if buffer.dimensions() > 1 || !buffer.is_c_contiguous() {
+      return Err(PyValueError::new_err(format!(
+        "{name} must be a contiguous 1-D integer buffer, got {} dimensions",
+        buffer.dimensions()
+      )));
+    }
+
+    if let Some(slice) = buffer.as_slice(py) {
+      let mut out = Vec::with_capacity(slice.len());
+      for value in slice {
+        let value = value.get();
+        if value < 0 {
+          return Err(InvalidGeometryError::new_err(format!(
+            "{name} must be non-negative, got {value}"
+          )));
+        }
+        out.push(value as usize);
+      }
+      return Ok(out);
+    }
+
+    return Err(PyValueError::new_err(format!("{name} must expose a readable buffer")));
+  }
+
+  obj.extract::<Vec<usize>>()
+}
+
+/// Validate that offsets are non-empty, start at zero, monotonic, and end
+/// at the expected sentinel value. Returns `InvalidGeometryError` on
+/// malformed inputs to mirror Python-facing error types.
+fn validate_offsets(offsets: &[usize], name: &str, expected_final: usize) -> PyResult<()> {
+  if offsets.is_empty() {
+    return Err(InvalidGeometryError::new_err(format!(
+      "{name} must contain at least one offset"
+    )));
+  }
+
+  if offsets[0] != 0 {
+    return Err(InvalidGeometryError::new_err(format!(
+      "{name} must start at 0, got {}",
+      offsets[0]
+    )));
+  }
+
+  for window in offsets.windows(2) {
+    if window[1] < window[0] {
+      return Err(InvalidGeometryError::new_err(format!(
+        "{name} must be monotonically increasing"
+      )));
+    }
+  }
+
+  if let Some(last) = offsets.last()
+    && *last != expected_final
+  {
+    return Err(InvalidGeometryError::new_err(format!(
+      "{name} must end at {expected_final}, got {last}"
+    )));
+  }
+
+  Ok(())
+}
+
+/// Extract a `Vec<(lat, lon)>` from a Python buffer or sequence.
+///
+/// Accepts any C-contiguous float buffer (f64 or f32) with at least two
+/// dimensions where the trailing dimension has length 2 or greater, or falls
+/// back to `extract`ing a list of tuples. Raises a `ValueError` when the
+/// buffer is not readable/contiguous or when the shape is incompatible.
+fn extract_ring_coords(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Vec<(f64, f64)>> {
+  if let Ok(buffer) = PyBuffer::<f64>::get(obj) {
+    if !buffer.is_c_contiguous() {
+      return Err(PyValueError::new_err("coords must be contiguous"));
+    }
+
+    let dimensions = buffer.dimensions();
+    if dimensions < 2 {
+      return Err(PyValueError::new_err(
+        "coords must be at least 2-D with trailing dimension 2 or 3",
+      ));
+    }
+    let shape = buffer.shape();
+    let last_dim = *shape.last().unwrap_or(&0);
+
+    if last_dim < 2 {
+      return Err(PyValueError::new_err(
+        "coords trailing dimension must be at least length 2",
+      ));
+    }
+
+    let rows = buffer.item_count() / last_dim;
+    let slice = buffer
+      .as_slice(py)
+      .ok_or_else(|| PyValueError::new_err("coords must be a readable, contiguous buffer"))?;
+
+    let mut coords = Vec::with_capacity(rows);
+    for row in 0..rows {
+      let base = row * last_dim;
+      let lat = slice[base].get();
+      let lon = slice[base + 1].get();
+      coords.push((lat, lon));
+    }
+    return Ok(coords);
+  }
+
+  if let Ok(buffer) = PyBuffer::<f32>::get(obj) {
+    if !buffer.is_c_contiguous() {
+      return Err(PyValueError::new_err("coords must be contiguous"));
+    }
+
+    let dimensions = buffer.dimensions();
+    if dimensions < 2 {
+      return Err(PyValueError::new_err(
+        "coords must be at least 2-D with trailing dimension 2 or 3",
+      ));
+    }
+    let shape = buffer.shape();
+    let last_dim = *shape.last().unwrap_or(&0);
+
+    if last_dim < 2 {
+      return Err(PyValueError::new_err(
+        "coords trailing dimension must be at least length 2",
+      ));
+    }
+
+    let rows = buffer.item_count() / last_dim;
+    let slice = buffer
+      .as_slice(py)
+      .ok_or_else(|| PyValueError::new_err("coords must be a readable, contiguous buffer"))?;
+
+    let mut coords = Vec::with_capacity(rows);
+    for row in 0..rows {
+      let base = row * last_dim;
+      let lat = slice[base].get() as f64;
+      let lon = slice[base + 1].get() as f64;
+      coords.push((lat, lon));
+    }
+    return Ok(coords);
+  }
+
+  obj.extract::<Vec<(f64, f64)>>()
+}
+
+/// Compute area of a ring slice using a GeographicLib accumulator.
+///
+/// Arguments define a half-open interval within `coords` that represent a
+/// single ring, along with indices used for error reporting. Returns the
+/// absolute value of the signed area. Errors when offsets are invalid, rings
+/// are too short, or any vertex fails latitude/longitude validation.
+fn compute_ring_area(
+  geodesic: &GeographicGeodesic,
+  coords: &[(f64, f64)],
+  start: usize,
+  end: usize,
+  polygon_index: usize,
+  ring_index: usize,
+) -> PyResult<f64> {
+  if end < start || end > coords.len() {
+    return Err(InvalidGeometryError::new_err(format!(
+      "polygon {polygon_index} ring {ring_index} has invalid offsets {start}..{end}"
+    )));
+  }
+
+  let count = end - start;
+  if count < 3 {
+    return Err(InvalidGeometryError::new_err(format!(
+      "polygon {polygon_index} ring {ring_index} must include at least 3 vertices"
+    )));
+  }
+
+  let mut area = GeographicPolygonArea::new(geodesic, Winding::CounterClockwise);
+  for (vertex_index, (lat, lon)) in coords[start..end].iter().copied().enumerate() {
+    validate_lat_lon(lat, lon, start + vertex_index)?;
+    area.add_point(lat, lon);
+  }
+
+  let (_perimeter, ring_area, _num) = area.compute(false);
+  Ok(ring_area.abs())
+}
+
+#[pyfunction]
+fn polygon_area_batch(
+  py: Python<'_>,
+  coords: &Bound<'_, PyAny>,
+  ring_offsets: &Bound<'_, PyAny>,
+  polygon_offsets: &Bound<'_, PyAny>,
+  ellipsoid: Option<&Ellipsoid>,
+) -> PyResult<Vec<f64>> {
+  let coords = extract_ring_coords(py, coords)?;
+  let ring_offsets = extract_offsets(py, ring_offsets, "ring_offsets")?;
+  let polygon_offsets = extract_offsets(py, polygon_offsets, "polygon_offsets")?;
+
+  validate_offsets(&ring_offsets, "ring_offsets", coords.len())?;
+  validate_offsets(
+    &polygon_offsets,
+    "polygon_offsets",
+    ring_offsets.len().saturating_sub(1),
+  )?;
+
+  let (semi_major, semi_minor) = ellipsoid_axes(ellipsoid)?.unwrap_or_else(default_ellipsoid_axes);
+  let flattening = 1.0 - (semi_minor / semi_major);
+  let geodesic = GeographicGeodesic::new(semi_major, flattening);
+
+  let mut areas = Vec::with_capacity(polygon_offsets.len().saturating_sub(1));
+
+  for (polygon_index, window) in polygon_offsets.windows(2).enumerate() {
+    let ring_start = window[0];
+    let ring_end = window[1];
+
+    if ring_end < ring_start || ring_end > ring_offsets.len().saturating_sub(1) {
+      return Err(InvalidGeometryError::new_err(format!(
+        "polygon {polygon_index} has invalid ring offsets {ring_start}..{ring_end}"
+      )));
+    }
+
+    if ring_start == ring_end {
+      areas.push(0.0);
+      continue;
+    }
+
+    let exterior_area = compute_ring_area(
+      &geodesic,
+      &coords,
+      ring_offsets[ring_start],
+      ring_offsets[ring_start + 1],
+      polygon_index,
+      ring_start,
+    )?;
+
+    let mut holes_area = 0.0;
+    for ring_index in (ring_start + 1)..ring_end {
+      let ring_area = compute_ring_area(
+        &geodesic,
+        &coords,
+        ring_offsets[ring_index],
+        ring_offsets[ring_index + 1],
+        polygon_index,
+        ring_index,
+      )?;
+      holes_area += ring_area;
+    }
+
+    let mut net = exterior_area - holes_area;
+    if net < 0.0 {
+      net = 0.0;
+    }
+    areas.push(net);
+  }
+
+  Ok(areas)
+}
+
 #[pymodule]
 fn _geodist_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add("EARTH_RADIUS_METERS", EARTH_RADIUS_METERS)?;
@@ -597,7 +1212,8 @@ fn _geodist_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add("InvalidEllipsoidError", py.get_type::<InvalidEllipsoidError>())?;
   m.add("InvalidBoundingBoxError", py.get_type::<InvalidBoundingBoxError>())?;
   m.add("EmptyPointSetError", py.get_type::<EmptyPointSetError>())?;
-  m.add("InvalidPolygonError", py.get_type::<InvalidBoundingBoxError>())?;
+  m.add("InvalidPolygonError", py.get_type::<InvalidPolygonError>())?;
+  m.add("InvalidGeometryError", py.get_type::<InvalidGeometryError>())?;
   m.add_class::<Ellipsoid>()?;
   m.add_class::<Point>()?;
   m.add_class::<Point3D>()?;
@@ -620,5 +1236,9 @@ fn _geodist_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add_function(wrap_pyfunction!(hausdorff_directed_clipped_3d, m)?)?;
   m.add_function(wrap_pyfunction!(hausdorff_clipped_3d, m)?)?;
   m.add_function(wrap_pyfunction!(hausdorff_polygon_boundary, m)?)?;
+  m.add_function(wrap_pyfunction!(geodesic_distance_batch, m)?)?;
+  m.add_function(wrap_pyfunction!(geodesic_with_bearings_batch, m)?)?;
+  m.add_function(wrap_pyfunction!(geodesic_distance_to_many, m)?)?;
+  m.add_function(wrap_pyfunction!(polygon_area_batch, m)?)?;
   Ok(())
 }

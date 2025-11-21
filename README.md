@@ -104,6 +104,42 @@ witness = hausdorff([origin], [east])
 print(witness.distance_m, witness.a_to_b.origin_index, witness.a_to_b.candidate_index)
 ```
 
+## Python vectorized batches
+
+Install the optional extra to enable NumPy-backed batch helpers:
+
+```bash
+pip install pygeodist[vectorized]
+```
+
+Key entry points live under `geodist.vectorized`:
+
+- Constructors: `points_from_coords`, `points3d_from_coords`, `polylines_from_coords`, and `polygons_from_coords` accept NumPy arrays or Python buffers. Validation is vectorized and reports the failing index.
+- Pairwise operations: `geodesic_distance_batch`, `geodesic_with_bearings_batch`, and `geodesic_distance_to_many` return NumPy arrays when available (lists otherwise).
+- Polygon area: `area_batch` consumes flat coordinate buffers plus ring/polygon offsets.
+
+Examples:
+
+```python
+import numpy as np
+from geodist import vectorized as vz
+
+origins = vz.points_from_coords(np.array([[0.0, 0.0], [0.0, 0.0]]))
+destinations = vz.points_from_coords(np.array([[0.0, 1.0], [1.0, 0.0]]))
+
+distances = vz.geodesic_distance_batch(origins, destinations)
+print(distances.to_numpy())  # array([111195.08023353, 111195.08023353])
+
+poly = vz.polygons_from_coords(
+    coords=[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
+    ring_offsets=[0, 5],
+    polygon_offsets=[0, 1],
+)
+print(vz.area_batch(poly).to_numpy())  # array([1.23087784e10])
+```
+
+See `pygeodist/devtools/bench_vectorized.py` for a quick throughput comparison between the vectorized and scalar paths.
+
 ## Shapely interoperability
 
 Shapely stays optional; install the extra when you need it:

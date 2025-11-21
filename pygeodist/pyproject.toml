@@ -33,17 +33,18 @@ Repository = "https://github.com/eddieland/geodist"
 
 [project.optional-dependencies]
 shapely = ["shapely>=2.0,<3.0"]
+vectorized = ["numpy>=1.24"]
 
 [dependency-groups]
 dev = [
     "codespell>=2.4.1",
-    "funlog>=0.2.1",
     "maturin>=1.10,<1.11",
     "mypy>=1.14.1",
+    "numpy>=2,<3",
     "pytest-sugar>=1.0.0",
     "pytest>=8.3.5",
     "rich>=14.0.0",
-    "ruff>=0.11.9",
+    "ruff>=0.14.6",
     "shapely>=2.0,<3.0",
     "typer>=0.15.0",
     "types-shapely>=2.1.0.20250917",

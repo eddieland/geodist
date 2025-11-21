@@ -13,10 +13,7 @@ InvalidRadiusError = _geodist_rs.InvalidRadiusError
 InvalidEllipsoidError = _geodist_rs.InvalidEllipsoidError
 InvalidBoundingBoxError = _geodist_rs.InvalidBoundingBoxError
 EmptyPointSetError = _geodist_rs.EmptyPointSetError
-
-
-class InvalidGeometryError(GeodistError):
-    """Raised when inputs cannot be coerced into a valid geometry."""
+InvalidGeometryError = _geodist_rs.InvalidGeometryError
 
 
 __all__ = (
