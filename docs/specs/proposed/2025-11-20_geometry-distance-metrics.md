@@ -1,0 +1,80 @@
+# Geometry Distance Metrics and Clipping Semantics
+
+## Purpose
+
+- Lock scope for geometry-aware distance metrics (Hausdorff, Fréchet, Chamfer) over LineString/Polyline, Polygon with holes, and Multi* inputs so Rust and Python surfaces converge.
+- Define sampling and clipping semantics up front to keep results auditable, reproducible, and consistent with existing geodesic kernels.
+
+## Guiding Constraints
+
+- Coordinates are lat/lon degrees on WGS84 by default; alternate ellipsoids or spherical radius remain explicit inputs. No implicit projections or axis reordering.
+- Validate bounds/finiteness for every vertex; reject degenerate rings (fewer than 4 coords or unclosed) and self-intersections where detectable without heavy overlays. Require holes to lie inside the outer ring and use CCW exterior / CW holes with closure tolerance (e.g., ≤1e-9 deg).
+- Sampling is deterministic: densification uses fixed tolerances (max segment length in meters or max angular separation in degrees) and always includes original vertices. Default knobs follow common GIS practice: `max_segment_length_m=100` (or `max_segment_angle_deg=0.1`), `interior_spacing_m=200`, and a hard cap of 50_000 samples/geometry (error if exceeded).
+- Metrics operate in 2D geodesic space; altitude-aware variants defer to a later spec. All distances use the same kernel as `geodesic_distance`/Hausdorff today.
+- Clipping uses axis-aligned lat/lon bounding boxes with inclusive edges; clipping affects evaluation points, not input validation. Bboxes that wrap the antimeridian are allowed (lon_min > lon_max).
+- Performance envelope: nearest-neighbor search uses kd-tree or equivalent O(N log N); targets ≤500 ms and ≤200 MB for 50k samples/side on a modern laptop. Document deviations and tuning levers.
+
+## Target Capabilities
+
+1. Support LineString/Polyline and MultiLineString inputs with densification controls for metric accuracy without exploding samples.
+2. Support filled Polygon geometries (exterior + holes) and MultiPolygon by sampling boundaries plus interior coverage points so distances reflect filled areas, not just ring perimeters.
+3. Implement directed and symmetric Hausdorff, discrete Fréchet for path similarity, and Chamfer (mean and optional max) with consistent witness reporting, tolerances, and clipping semantics.
+
+## Geometry & Sampling Semantics
+
+- **LineString/Polyline:** Treat segments as great-circle arcs between vertices. Densify segments where chord length exceeds `max_segment_length_m` (default 100 m) or heading change exceeds `max_segment_angle_deg` (default 0.1 deg); either knob required. Always preserve endpoints. MultiLineString flattens to per-part samples with part offsets retained for witness mapping. Raise `InvalidGeometryError` if densification would exceed the 50k-sample cap.
+- **Polygon:** Polygons represent filled regions (exterior minus holes). Sample every ring with the same densification knobs as polylines, respecting orientation and closure tolerance. Add interior coverage points per polygon via a quasi-grid seeded from bbox intersections at `interior_spacing_m` (default 200 m) so distances account for filled area. Holes contribute samples that mark voids (distance counts from hole boundary outward). Reject polygons whose holes overlap or touch the exterior. For shapes crossing the antimeridian or touching poles, grid seeding respects wraparound and clips at ±90° without distorting longitudes.
+- **MultiPoint/Line/Polygon:** Validate homogeneous dimensionality. Evaluate metrics componentwise but report a unified witness that includes the originating part index.
+
+## Distance Metric Semantics
+
+- **Hausdorff:** Provide directed (`A→B`) and symmetric (`max(A→B, B→A)`) over sampled point sets. Witness includes `source_part`, `source_index`, `target_part`, `target_index`, `source_coord`, `target_coord`, `distance_m`, with zero-based indices and tie-breaker on lowest source_index then target_index. Optionally return both distance and realizing coordinates.
+- **Fréchet:** Use discrete Fréchet on densified polylines (and ring boundaries). Respect vertex order; multi-part inputs either match paired parts or apply a documented set rule—default is max over directed distances across parts with witness of traversal paths (arrays of indices) to mirror Shapely/JTS expectations. Continuous variant deferred. Zero-based indices.
+- **Chamfer:** Compute mean nearest-neighbor distance for each direction with optional `reduction="mean" | "sum" | "max"`; symmetric mode averages (or maxes) both directions. Witness reports worst offending sample with the same schema as Hausdorff when `reduction="max"`. Default reduction is `mean` (scale-invariant).
+
+## Clipping Rules
+
+- Accept optional `BoundingBox` (lat_min, lon_min, lat_max, lon_max). Samples on edges count as inside. lon_min > lon_max denotes antimeridian-wrap; clip using great-circle intersections and preserve vertex order.
+- For Hausdorff/Chamfer, discard samples outside the bbox before nearest-neighbor search; empty result after clipping raises `InvalidGeometryError` and reports which side emptied.
+- For Fréchet, clip lines by truncating to the bbox-intersecting portions (keep vertex order, insert intersection points as needed) before densification; if a path fully clips out, treat it as empty and raise `InvalidPathError`.
+- Clipping never rewrites input coordinates outside validation; it only gates evaluation.
+
+## Subagent Execution Plan
+
+The following backlog is prioritized for a single subagent (or small group) to implement iteratively. Update the _Status_ and _Lessons Learned_ sections while working. Each task must meet accuracy (within sampling tolerance/2), perf (≤500 ms, ≤200 MB at 50k samples/side), and stability (witness schema unchanged) gates to call DoD.
+
+### Task Backlog
+
+Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ deferred).
+
+| Priority | Task | Definition of Done | Notes | Status |
+| -------- | ---- | ------------------ | ----- | ------ |
+| P0 | Finalize densification knobs and validation rules for LineString/Polygon/Multi inputs | Documented defaults + bounds, ring closure/containment checks, and deterministic sampling order agreed across Rust/Python | Drives API shape and test fixtures | 📝 |
+| P0 | Specify Hausdorff/Fréchet/Chamfer APIs and witness payloads | Function signatures, reduction modes, and witness schemas captured; `_geodist_rs.pyi` shape ready for implementation | Aligns with existing point-set Hausdorff surface | 📝 |
+| P0 | Define clipping behavior across metrics | Rules for bbox handling, error cases, and edge inclusion recorded; examples added | Must align with current point clipping semantics | 📝 |
+| P1 | Draft test matrix and fixtures | Golden cases for rings with holes, crossing polylines, and clipped evaluations; baseline tolerances established | Feeds kernel and binding tests | 📝 |
+| P2 | Performance + memory targets | Sampling defaults justified with target complexity bounds; profiling plan outlined | Adjust after initial benchmarks | 📝 |
+| P3 | Optional extras (adaptive sampling, altitude variants) | Conditions for expanding scope documented | Defer until core metrics stabilize | 📝 |
+
+_Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
+
+### Risks & Mitigations
+
+- **Risk:** Overly coarse sampling skews distances or misses hole coverage. **Mitigation:** Provide explicit spacing knobs with conservative defaults and fixture-based regression tests.
+- **Risk:** Clipping semantics diverge between metrics. **Mitigation:** Centralize bbox handling helpers and reuse across kernels; document error paths.
+- **Risk:** Witness payloads become unstable across implementations. **Mitigation:** Define deterministic tie-breaking (e.g., lowest index) and include in tests.
+
+### Open Questions
+
+- Are interior coverage points sufficient, or do we need adaptive refinement near thin polygons/holes?
+- Should Fréchet expose both discrete and continuous variants, or is discrete plus densification enough for v1?
+- Do we expose Chamfer `reduction="sum"` by default or prefer `mean` to stay scale-invariant?
+
+## Status Tracking (to be updated by subagent)
+
+- **Latest completed task:** _None yet (new spec)._
+- **Next up:** _Finalize densification knobs and validation rules for LineString/Polygon/Multi inputs._
+
+## Lessons Learned (ongoing)
+
+- Deterministic sampling and shared clipping helpers are essential to keep Rust/Python parity and reproducibility.
