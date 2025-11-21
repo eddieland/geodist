@@ -98,9 +98,5 @@ clean: ## Clean build artifacts
 .PHONY: install-dev-tools
 install-dev-tools: ## Install development tools
 	rustup show # Ensures rust-toolchain.toml is applied
-	cargo install cargo-watch
-	cargo install cargo-outdated
 	cargo install cargo-nextest
 	cargo install cargo-llvm-cov
-	cargo install cargo-insta
-	uv tool install pre-commit
