@@ -40,6 +40,32 @@ pub enum GeodistError {
   },
   /// Point sets must be non-empty for Hausdorff distance.
   EmptyPointSet,
+  /// Polyline inputs must provide at least one densification knob.
+  MissingDensificationKnob,
+  /// Polyline parts must contain at least two distinct vertices after
+  /// collapsing duplicates.
+  DegeneratePolyline { part_index: Option<usize> },
+  /// Vertex validation failed with part/vertex index context.
+  InvalidVertex {
+    part_index: Option<usize>,
+    vertex_index: usize,
+    error: VertexValidationError,
+  },
+  /// Densification predicted more samples than the configured cap.
+  SampleCapExceeded {
+    expected: usize,
+    cap: usize,
+    part_index: Option<usize>,
+  },
+}
+
+/// Vertex-level validation errors used by polyline validators.
+#[derive(Debug, Clone, PartialEq)]
+pub enum VertexValidationError {
+  /// Latitude must lie within `[-90.0, 90.0]` and be finite.
+  Latitude(f64),
+  /// Longitude must lie within `[-180.0, 180.0]` and be finite.
+  Longitude(f64),
 }
 
 impl fmt::Display for GeodistError {
@@ -68,6 +94,46 @@ impl fmt::Display for GeodistError {
         "invalid bounding box [{min_lat}, {max_lat}] x [{min_lon}, {max_lon}]; expected ordered finite degrees"
       ),
       Self::EmptyPointSet => write!(f, "point sets must be non-empty"),
+      Self::MissingDensificationKnob => write!(
+        f,
+        "polyline densification requires at least one knob: set max_segment_length_m and/or max_segment_angle_deg"
+      ),
+      Self::DegeneratePolyline { part_index } => match part_index {
+        Some(index) => write!(f, "polyline part {index} must contain at least two distinct vertices"),
+        None => write!(f, "polyline must contain at least two distinct vertices"),
+      },
+      Self::InvalidVertex {
+        part_index,
+        vertex_index,
+        error,
+      } => {
+        let prefix = match part_index {
+          Some(part) => format!("vertex {vertex_index} in part {part}"),
+          None => format!("vertex {vertex_index}"),
+        };
+
+        match error {
+          VertexValidationError::Latitude(value) => write!(
+            f,
+            "{prefix} has invalid latitude {value}; expected finite degrees in [{MIN_LAT_DEGREES}, {MAX_LAT_DEGREES}]"
+          ),
+          VertexValidationError::Longitude(value) => write!(
+            f,
+            "{prefix} has invalid longitude {value}; expected finite degrees in [{MIN_LON_DEGREES}, {MAX_LON_DEGREES}]"
+          ),
+        }
+      }
+      Self::SampleCapExceeded {
+        expected,
+        cap,
+        part_index,
+      } => match part_index {
+        Some(index) => write!(
+          f,
+          "densification exceeds sample_cap={cap}; expected {expected} samples (part {index})"
+        ),
+        None => write!(f, "densification exceeds sample_cap={cap}; expected {expected} samples"),
+      },
     }
   }
 }

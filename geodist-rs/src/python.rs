@@ -317,6 +317,7 @@ fn map_geodist_error(err: types::GeodistError) -> PyErr {
     types::GeodistError::InvalidEllipsoid { .. } => InvalidEllipsoidError::new_err(message),
     types::GeodistError::InvalidBoundingBox { .. } => InvalidBoundingBoxError::new_err(message),
     types::GeodistError::EmptyPointSet => EmptyPointSetError::new_err(message),
+    _ => GeodistError::new_err(message),
   }
 }
 

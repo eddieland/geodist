@@ -59,6 +59,14 @@
 - **Fréchet:** Use discrete Fréchet on densified polylines (and ring boundaries). Respect vertex order; multi-part inputs either match paired parts or apply a documented set rule—default is max over directed distances across parts with witness of traversal paths (arrays of indices) to mirror Shapely/JTS expectations. Continuous variant deferred. Zero-based indices.
 - **Chamfer:** Compute mean nearest-neighbor distance for each direction with optional `reduction="mean" | "sum" | "max"`; symmetric mode averages (or maxes) both directions. Witness reports worst offending sample with the same schema as Hausdorff when `reduction="max"`. Default reduction is `mean` (scale-invariant).
 
+### MultiLineString acceptance (P0)
+
+- **Shape + validation:** Accept sequences of LineStrings (array-like, GeoJSON, or Shapely MultiLineString) with at least one part containing two or more vertices. Validate every part independently with polyline rules (bounds, finiteness, densification knobs). Reject MultiLineStrings where all parts are empty/degenerate (`InvalidGeometryError` with part index when applicable).
+- **Densification + caps:** Densify each part using the same `max_segment_length_m`/`max_segment_angle_deg` knobs. Collapse consecutive duplicates within a part before counting samples. Apply the 50_000-sample cap to the flattened, densified geometry; error messages report the offending part index and predicted total so callers can coarsen tolerances.
+- **Flattening for search:** Flatten part samples into a single ordered array for nearest-neighbor search while retaining `part_start_offsets` so witness indices map back to `(part, vertex_within_part)`. KD-tree (or equivalent) builds over the flattened array; per-part boundaries do not alter distance evaluation.
+- **Witness payloads:** `Witness.source_part`/`target_part` refer to the originating MultiLineString part; `source_index`/`target_index` are the vertex positions within those parts post-densification (duplicates collapsed). Tie-break ordering remains distance → source_part → source_index → target_part → target_index to keep deterministic results across Rust/Python.
+- **Fixtures (sketch):** (1) Two-part A vs single-part B where only part 1 contributes the Hausdorff witness; ensure part index surfaces. (2) MultiLineString with a zero-length part and a valid part errors on the bad part index. (3) Antimeridian-wrapping part retains ordering and part indices after densification.
+
 ## Clipping Rules
 
 - Accept optional `BoundingBox` (lat_min, lon_min, lat_max, lon_max). Samples on edges count as inside. lon_min > lon_max denotes antimeridian-wrap; clip using great-circle intersections and preserve vertex order.
@@ -78,8 +86,8 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 | -------- | ---- | ------------------ | ----- | ------ |
 | P0 | Lock densification + validation for LineString/Polyline inputs | Defaults, bounds, and deterministic sampling order documented; sample-cap behavior called out with examples | Sets the first shippable surface | ✅ |
 | P0 | Specify Hausdorff + Chamfer APIs and witness payloads for polylines | Function signatures, reduction modes, tie-break rules, and `_geodist_rs.pyi` shape captured; matches current point Hausdorff contract | Enables early Rust/Python delivery on polylines | ✅ |
-| P0 | Add end-to-end MultiLineString acceptance | Validation + sampling rules defined; witness shape records part indices; tests/fixtures sketched for LineString + MultiLineString parity | Delivers the first “additional data type” increment | 📝 |
-| P0 | Define clipping behavior for polyline metrics | Bbox rules, antimeridian handling, and empty-geometry failures documented with examples | Keeps first wave auditable | 📝 |
+| P0 | Add end-to-end MultiLineString acceptance | Validation + sampling rules defined; witness shape records part indices; tests/fixtures sketched for LineString + MultiLineString parity | Delivers the first “additional data type” increment | ✅ |
+| P0 | Define clipping behavior for polyline metrics | Bbox rules, antimeridian handling, and empty-geometry failures documented with examples | Keeps first wave auditable | 🚧 |
 | P1 | Ring validation + densification for Polygon/MultiPolygon (boundary-only) | Closure/orientation/containment checks and sampling defaults captured; explicit note that interior coverage is deferred | Unblocks perimeter-only distances as a second increment | 📝 |
 | P1 | Polygon boundary Hausdorff/Chamfer witness + API shape | Witness payloads and tie-breaks defined; `_geodist_rs.pyi` updates described; fixtures outlined | Builds on polyline work before interior fill | 📝 |
 | P1 | Draft polyline-focused test matrix | Golden cases for multi-part polylines, crossing lines, and clipped evaluations; tolerances stated | Guards early delivery | 📝 |
@@ -103,8 +111,8 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Specify Hausdorff + Chamfer APIs and witness payloads for polylines._ 
-- **Next up:** _Add end-to-end MultiLineString acceptance._
+- **Latest completed task:** _Add end-to-end MultiLineString acceptance._
+- **Next up:** _Define clipping behavior for polyline metrics._
 
 ## Lessons Learned (ongoing)
 

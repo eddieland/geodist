@@ -42,6 +42,7 @@ mod algorithms;
 mod constants;
 mod distance;
 mod hausdorff;
+mod polyline;
 mod types;
 
 pub use algorithms::{GeodesicAlgorithm, Geographiclib, Spherical};
@@ -57,4 +58,5 @@ pub use hausdorff::{
   hausdorff_directed_3d_on_ellipsoid, hausdorff_directed_clipped, hausdorff_directed_clipped_3d,
   hausdorff_directed_clipped_3d_on_ellipsoid,
 };
-pub use types::{BoundingBox, Distance, Ellipsoid, GeodistError, Point, Point3D};
+pub use polyline::{DensificationOptions, FlattenedPolyline, densify_multiline, densify_polyline};
+pub use types::{BoundingBox, Distance, Ellipsoid, GeodistError, Point, Point3D, VertexValidationError};
