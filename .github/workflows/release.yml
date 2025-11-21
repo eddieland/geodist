@@ -347,23 +347,7 @@ PY
         uses: astral-sh/setup-uv@v3
 
       - name: Remove stale compiled extensions
-        working-directory: pygeodist
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import pathlib
-
-          root = pathlib.Path("src/geodist")
-          removed = []
-          for path in root.glob("_geodist_rs.*"):
-            if path.suffix.lower() in {".so", ".pyd", ".dylib", ".dll"}:
-              path.unlink()
-              removed.append(path.name)
-
-          if removed:
-            print("Removed stale artifacts:", ", ".join(sorted(removed)))
-          PY
+        run: python .github/scripts/remove_stale_extensions.py
 
       - name: Build wheel
         if: matrix.os == 'ubuntu-latest'
