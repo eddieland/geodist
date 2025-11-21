@@ -49,11 +49,15 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
-| P0 | Finalize densification knobs and validation rules for LineString/Polygon/Multi inputs | Documented defaults + bounds, ring closure/containment checks, and deterministic sampling order agreed across Rust/Python | Drives API shape and test fixtures | 📝 |
-| P0 | Specify Hausdorff/Fréchet/Chamfer APIs and witness payloads | Function signatures, reduction modes, and witness schemas captured; `_geodist_rs.pyi` shape ready for implementation | Aligns with existing point-set Hausdorff surface | 📝 |
-| P0 | Define clipping behavior across metrics | Rules for bbox handling, error cases, and edge inclusion recorded; examples added | Must align with current point clipping semantics | 📝 |
-| P1 | Draft test matrix and fixtures | Golden cases for rings with holes, crossing polylines, and clipped evaluations; baseline tolerances established | Feeds kernel and binding tests | 📝 |
-| P2 | Performance + memory targets | Sampling defaults justified with target complexity bounds; profiling plan outlined | Adjust after initial benchmarks | 📝 |
+| P0 | Lock densification + validation for LineString/Polyline inputs | Defaults, bounds, and deterministic sampling order documented; sample-cap behavior called out with examples | Sets the first shippable surface | 📝 |
+| P0 | Specify Hausdorff + Chamfer APIs and witness payloads for polylines | Function signatures, reduction modes, tie-break rules, and `_geodist_rs.pyi` shape captured; matches current point Hausdorff contract | Enables early Rust/Python delivery on polylines | 📝 |
+| P0 | Add end-to-end MultiLineString acceptance | Validation + sampling rules defined; witness shape records part indices; tests/fixtures sketched for LineString + MultiLineString parity | Delivers the first “additional data type” increment | 📝 |
+| P0 | Define clipping behavior for polyline metrics | Bbox rules, antimeridian handling, and empty-geometry failures documented with examples | Keeps first wave auditable | 📝 |
+| P1 | Ring validation + densification for Polygon/MultiPolygon (boundary-only) | Closure/orientation/containment checks and sampling defaults captured; explicit note that interior coverage is deferred | Unblocks perimeter-only distances as a second increment | 📝 |
+| P1 | Polygon boundary Hausdorff/Chamfer witness + API shape | Witness payloads and tie-breaks defined; `_geodist_rs.pyi` updates described; fixtures outlined | Builds on polyline work before interior fill | 📝 |
+| P1 | Draft polyline-focused test matrix | Golden cases for multi-part polylines, crossing lines, and clipped evaluations; tolerances stated | Guards early delivery | 📝 |
+| P2 | Extend to interior coverage grids + Fréchet semantics across polygons | Grid seeding and Fréchet traversal rules documented; perf/complexity notes updated | Activates filled-area accuracy | 📝 |
+| P2 | Performance + memory targets | Sampling defaults justified with complexity bounds; profiling plan outlined | Adjust after initial benchmarks | 📝 |
 | P3 | Optional extras (adaptive sampling, altitude variants) | Conditions for expanding scope documented | Defer until core metrics stabilize | 📝 |
 
 _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
@@ -73,7 +77,7 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 ## Status Tracking (to be updated by subagent)
 
 - **Latest completed task:** _None yet (new spec)._
-- **Next up:** _Finalize densification knobs and validation rules for LineString/Polygon/Multi inputs._
+- **Next up:** _Lock densification + validation for LineString/Polyline inputs._
 
 ## Lessons Learned (ongoing)
 
