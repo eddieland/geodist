@@ -6,6 +6,24 @@ import importlib.metadata
 import importlib.util
 from typing import TYPE_CHECKING
 
+from geodist import (
+    EARTH_RADIUS_METERS,
+    Point,
+    Point3D,
+    geodesic_distance,
+    geodesic_distance_3d,
+    geodesic_distance_on_ellipsoid,
+    geodesic_with_bearings,
+    geodesic_with_bearings_on_ellipsoid,
+    hausdorff_clipped,
+    hausdorff_directed,
+    hausdorff_directed_clipped,
+    BoundingBox,
+)
+from geodist import (
+    hausdorff as hausdorff_sym,
+)
+
 try:
     import typer
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised interactively
@@ -17,7 +35,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - exercised interactively
 
 if TYPE_CHECKING:  # pragma: no cover - import guard for type checking only
     from .geometry import BoundingBox, Point, Point3D
-    from .ops import GeodesicResult, HausdorffDirectedWitness, HausdorffWitness
+    from .ops import HausdorffDirectedWitness
 
 
 DEFAULT_ORIGIN = "37.6189,-122.3750"  # San Francisco International Airport
@@ -36,105 +54,14 @@ app = typer.Typer(
 )
 
 
-def _extension_status() -> tuple[float | None, str | None]:
-    """Return the earth radius in meters when the extension is available."""
-    try:
-        from ._geodist_rs import EARTH_RADIUS_METERS
-    except ImportError as exc:
-        return None, str(exc)
-    return float(EARTH_RADIUS_METERS), None
-
-
-def _interop_status() -> str:
-    """Return a short status string for optional Shapely helpers."""
-    return "available" if importlib.util.find_spec("shapely.geometry") else "not installed"
-
-
-def _require_extension() -> float:
-    """Ensure the compiled extension is ready before running binding demos."""
-    radius_meters, error = _extension_status()
-    if radius_meters is None:
-        typer.echo("Extension is not available; build it with `uv run maturin develop`.")
-        if error:
-            typer.echo(f"Import error: {error}")
-        raise typer.Exit(code=1)
-    return radius_meters
-
-
-def _parse_point(serialized: str) -> "Point":
-    """Parse a "lat,lon" string into a :class:`geodist.geometry.Point`."""
-    from .geometry import Point
-
-    try:
-        lat_str, lon_str = (component.strip() for component in serialized.split(",", maxsplit=1))
-        latitude = float(lat_str)
-        longitude = float(lon_str)
-    except ValueError as exc:
-        raise typer.BadParameter("Point must be formatted as 'lat,lon'.") from exc
-    return Point(latitude, longitude)
-
-
-def _parse_point3d(serialized: str) -> "Point3D":
-    """Parse a "lat,lon,alt_m" string into a :class:`geodist.geometry.Point3D`."""
-    from .geometry import Point3D
-
-    try:
-        lat_str, lon_str, altitude_str = (component.strip() for component in serialized.split(",", maxsplit=2))
-        latitude = float(lat_str)
-        longitude = float(lon_str)
-        altitude_m = float(altitude_str)
-    except ValueError as exc:
-        raise typer.BadParameter("Point3D must be formatted as 'lat,lon,alt_m'.") from exc
-    return Point3D(latitude, longitude, altitude_m)
-
-
-def _parse_points(serialized: str) -> list["Point"]:
-    """Parse a semicolon-delimited list of "lat,lon" strings into :class:`Point` objects."""
-    points = [_parse_point(chunk) for chunk in serialized.split(";") if chunk.strip()]
-    if not points:
-        raise typer.BadParameter("Provide at least one point as 'lat,lon' pair.")
-    return points
-
-
-def _parse_bounding_box(serialized: str) -> "BoundingBox":
-    """Parse "min_lat,max_lat,min_lon,max_lon" into a :class:`BoundingBox`."""
-    from .geometry import BoundingBox
-
-    try:
-        min_lat_str, max_lat_str, min_lon_str, max_lon_str = (
-            component.strip() for component in serialized.split(",", maxsplit=3)
-        )
-        min_lat = float(min_lat_str)
-        max_lat = float(max_lat_str)
-        min_lon = float(min_lon_str)
-        max_lon = float(max_lon_str)
-    except ValueError as exc:
-        raise typer.BadParameter(
-            "Bounding box must be formatted as 'min_lat,max_lat,min_lon,max_lon'."
-        ) from exc
-    return BoundingBox(min_lat, max_lat, min_lon, max_lon)
-
-
-def _format_directed_witness(label: str, witness: "HausdorffDirectedWitness") -> str:
-    return (
-        f"{label}: {witness.distance_m:.3f} m (origin #{witness.origin_index} -> candidate #{witness.candidate_index})"
-    )
-
-
 @app.command()
 def info() -> None:
     """Show package version and whether the Rust extension is importable."""
     version = importlib.metadata.version("pygeodist")
-    radius_meters, error = _extension_status()
     typer.echo(f"pygeodist version: {version}")
-    typer.echo(f"Shapely interop helpers: {_interop_status()}")
-    if radius_meters is None:
-        typer.echo("Extension: not loaded")
-        typer.echo(f"Import error: {error}")
-        return
-
+    typer.echo(f"Shapely interop helpers: {_shapely_interop_status()}")
     typer.echo("Extension: loaded")
-    typer.echo(f"Earth radius: {radius_meters:.3f} m")
+    typer.echo(f"Earth radius: {EARTH_RADIUS_METERS:.3f} m")
 
 
 @app.command()
@@ -148,14 +75,12 @@ def earth_radius(
     ),
 ) -> None:
     """Print the earth radius using the compiled constant."""
-    radius_meters = _require_extension()
-
     normalized_unit = unit.lower()
     if normalized_unit in {"meter", "meters", "m"}:
-        typer.echo(f"Earth radius: {radius_meters:.3f} m")
+        typer.echo(f"Earth radius: {EARTH_RADIUS_METERS:.3f} m")
         return
     if normalized_unit in {"kilometer", "kilometers", "km"}:
-        typer.echo(f"Earth radius: {radius_meters / 1000:.3f} km")
+        typer.echo(f"Earth radius: {EARTH_RADIUS_METERS / 1000:.3f} km")
         return
 
     typer.echo("Unsupported unit. Choose 'meters' or 'kilometers'.")
@@ -184,10 +109,6 @@ def geodesic(
     bearings: bool = typer.Option(False, "--bearings", help="Include forward and reverse bearings."),
 ) -> None:
     """Compute a geodesic distance (and optional bearings) between two points."""
-    _require_extension()
-    from .ops import geodesic_distance, geodesic_distance_on_ellipsoid, geodesic_with_bearings
-    from .ops import geodesic_with_bearings_on_ellipsoid
-
     origin_point = _parse_point(origin)
     destination_point = _parse_point(destination)
     if ellipsoid:
@@ -233,9 +154,6 @@ def distance_3d(
     ),
 ) -> None:
     """Compute the straight-line (ECEF chord) distance between two 3D points."""
-    _require_extension()
-    from .ops import geodesic_distance_3d
-
     origin_point = _parse_point3d(origin)
     destination_point = _parse_point3d(destination)
     distance = geodesic_distance_3d(origin_point, destination_point)
@@ -270,14 +188,6 @@ def hausdorff(
     ),
 ) -> None:
     """Compute directed and symmetric Hausdorff distances between two point sets."""
-    _require_extension()
-    from .ops import (
-        hausdorff as hausdorff_sym,
-        hausdorff_clipped,
-        hausdorff_directed,
-        hausdorff_directed_clipped,
-    )
-
     points_a = _parse_points(set_a)
     points_b = _parse_points(set_b)
     if clip:
@@ -301,7 +211,6 @@ def hausdorff(
 @app.command()
 def demo() -> None:
     """Run a quick tour of the bindings using sample coordinates."""
-    _require_extension()
     typer.echo("=== Geodesic on sphere with bearings ===")
     geodesic(bearings=True)
     typer.echo()
@@ -313,6 +222,63 @@ def demo() -> None:
     typer.echo()
     typer.echo("=== Hausdorff demo (with clipping) ===")
     hausdorff(clip=True)
+
+
+def _shapely_interop_status() -> str:
+    """Return a short status string for optional Shapely helpers."""
+    return "available" if importlib.util.find_spec("shapely.geometry") else "not installed"
+
+
+def _parse_point(serialized: str) -> Point:
+    """Parse a "lat,lon" string into a :class:`geodist.geometry.Point`."""
+    try:
+        lat_str, lon_str = (component.strip() for component in serialized.split(",", maxsplit=1))
+        latitude = float(lat_str)
+        longitude = float(lon_str)
+    except ValueError as exc:
+        raise typer.BadParameter("Point must be formatted as 'lat,lon'.") from exc
+    return Point(latitude, longitude)
+
+
+def _parse_point3d(serialized: str) -> Point3D:
+    """Parse a "lat,lon,alt_m" string into a :class:`geodist.geometry.Point3D`."""
+    try:
+        lat_str, lon_str, altitude_str = (component.strip() for component in serialized.split(",", maxsplit=2))
+        latitude = float(lat_str)
+        longitude = float(lon_str)
+        altitude_m = float(altitude_str)
+    except ValueError as exc:
+        raise typer.BadParameter("Point3D must be formatted as 'lat,lon,alt_m'.") from exc
+    return Point3D(latitude, longitude, altitude_m)
+
+
+def _parse_points(serialized: str) -> list[Point]:
+    """Parse a semicolon-delimited list of "lat,lon" strings into :class:`Point` objects."""
+    points = [_parse_point(chunk) for chunk in serialized.split(";") if chunk.strip()]
+    if not points:
+        raise typer.BadParameter("Provide at least one point as 'lat,lon' pair.")
+    return points
+
+
+def _parse_bounding_box(serialized: str) -> BoundingBox:
+    """Parse "min_lat,max_lat,min_lon,max_lon" into a :class:`BoundingBox`."""
+    try:
+        min_lat_str, max_lat_str, min_lon_str, max_lon_str = (
+            component.strip() for component in serialized.split(",", maxsplit=3)
+        )
+        min_lat = float(min_lat_str)
+        max_lat = float(max_lat_str)
+        min_lon = float(min_lon_str)
+        max_lon = float(max_lon_str)
+    except ValueError as exc:
+        raise typer.BadParameter("Bounding box must be formatted as 'min_lat,max_lat,min_lon,max_lon'.") from exc
+    return BoundingBox(min_lat, max_lat, min_lon, max_lon)
+
+
+def _format_directed_witness(label: str, witness: "HausdorffDirectedWitness") -> str:
+    return (
+        f"{label}: {witness.distance_m:.3f} m (origin #{witness.origin_index} -> candidate #{witness.candidate_index})"
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - manual entrypoint

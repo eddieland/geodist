@@ -13,7 +13,6 @@ from geodist.cli import (
     app,
 )
 
-
 runner = CliRunner()
 
 
