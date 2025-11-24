@@ -17,6 +17,7 @@ class InvalidRadiusError(GeodistError): ...
 class InvalidEllipsoidError(GeodistError): ...
 class InvalidBoundingBoxError(GeodistError): ...
 class EmptyPointSetError(GeodistError): ...
+class InvalidGeometryError(GeodistError): ...
 
 class Ellipsoid:
     semi_major_axis_m: float
@@ -112,6 +113,33 @@ def hausdorff_polygon_boundary(
     max_segment_angle_deg: float | None,
     sample_cap: int,
 ) -> float: ...
+def geodesic_distance_batch(
+    origins_lat: object,
+    origins_lon: object,
+    destinations_lat: object,
+    destinations_lon: object,
+    ellipsoid: Ellipsoid | None = ...,
+) -> list[float]: ...
+def geodesic_with_bearings_batch(
+    origins_lat: object,
+    origins_lon: object,
+    destinations_lat: object,
+    destinations_lon: object,
+    ellipsoid: Ellipsoid | None = ...,
+) -> tuple[list[float], list[float], list[float]]: ...
+def geodesic_distance_to_many(
+    origin_lat: float,
+    origin_lon: float,
+    destinations_lat: object,
+    destinations_lon: object,
+    ellipsoid: Ellipsoid | None = ...,
+) -> list[float]: ...
+def polygon_area_batch(
+    coords: object,
+    ring_offsets: object,
+    polygon_offsets: object,
+    ellipsoid: Ellipsoid | None = ...,
+) -> list[float]: ...
 
 __all__ = [
     "EARTH_RADIUS_METERS",
@@ -124,6 +152,7 @@ __all__ = [
     "InvalidEllipsoidError",
     "InvalidBoundingBoxError",
     "EmptyPointSetError",
+    "InvalidGeometryError",
     "Ellipsoid",
     "Point",
     "Point3D",
@@ -146,6 +175,10 @@ __all__ = [
     "hausdorff_directed_clipped_3d",
     "hausdorff_clipped_3d",
     "hausdorff_polygon_boundary",
+    "geodesic_distance_batch",
+    "geodesic_with_bearings_batch",
+    "geodesic_distance_to_many",
+    "polygon_area_batch",
 ]
 
 # Upcoming Rust-backed geometry handles will mirror the Rust structs once exposed:

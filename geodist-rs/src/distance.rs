@@ -3,7 +3,7 @@
 //! Inputs are degrees; output is meters.
 
 use crate::algorithms::{GeodesicAlgorithm, Geographiclib, Spherical};
-use crate::{Distance, Ellipsoid, GeodistError, Point, Point3D};
+use crate::{Distance, EARTH_RADIUS_METERS, Ellipsoid, GeodistError, Point, Point3D};
 
 /// Earth-Centered, Earth-Fixed (ECEF) Cartesian coordinate in meters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -252,19 +252,8 @@ fn geodesic_with_bearings_inner(radius_meters: f64, p1: Point, p2: Point) -> Res
   p1.validate()?;
   p2.validate()?;
 
-  let lat1 = p1.lat.to_radians();
-  let lat2 = p2.lat.to_radians();
-  let delta_lat = (p2.lat - p1.lat).to_radians();
-  let delta_lon = (p2.lon - p1.lon).to_radians();
-
-  let sin_lat = (delta_lat / 2.0).sin();
-  let sin_lon = (delta_lon / 2.0).sin();
-
-  let a = sin_lat * sin_lat + lat1.cos() * lat2.cos() * sin_lon * sin_lon;
-  let normalized_a = a.clamp(0.0, 1.0);
-  let c = 2.0 * normalized_a.sqrt().atan2((1.0 - normalized_a).sqrt());
-
-  let meters = radius_meters * c;
+  let (meters, initial_bearing_deg, final_bearing_deg) =
+    spherical_distance_and_bearings_with_radius(radius_meters, p1.lat, p1.lon, p2.lat, p2.lon);
   let distance = Distance::from_meters(meters)?;
 
   if meters == 0.0 {
@@ -275,31 +264,70 @@ fn geodesic_with_bearings_inner(radius_meters: f64, p1: Point, p2: Point) -> Res
     });
   }
 
-  let initial = initial_bearing_from_radians(lat1, lat2, delta_lon);
-  let reverse = initial_bearing_from_radians(lat2, lat1, -delta_lon);
-  let final_bearing = normalize_bearing(reverse + 180.0);
-
   Ok(GeodesicSolution {
     distance,
-    initial_bearing_deg: initial,
-    final_bearing_deg: final_bearing,
+    initial_bearing_deg,
+    final_bearing_deg,
   })
 }
 
 /// Compute the forward azimuth from one latitude to another in degrees.
-fn initial_bearing_from_radians(lat1: f64, lat2: f64, delta_lon: f64) -> f64 {
+pub fn initial_bearing_from_radians(lat1: f64, lat2: f64, delta_lon: f64) -> f64 {
   let y = delta_lon.sin() * lat2.cos();
   let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * delta_lon.cos();
   normalize_bearing(y.atan2(x).to_degrees())
 }
 
 /// Normalize a bearing in degrees to the `[0, 360)` range.
-fn normalize_bearing(mut degrees: f64) -> f64 {
+pub fn normalize_bearing(mut degrees: f64) -> f64 {
   degrees %= 360.0;
   if degrees < 0.0 {
     degrees += 360.0;
   }
   degrees
+}
+
+/// Compute spherical distance and bearings in degrees using the provided
+/// radius.
+///
+/// Inputs are degrees with no validation; callers should ensure ranges are
+/// appropriate before invoking.
+pub fn spherical_distance_and_bearings_with_radius(
+  radius_meters: f64,
+  lat1_deg: f64,
+  lon1_deg: f64,
+  lat2_deg: f64,
+  lon2_deg: f64,
+) -> (f64, f64, f64) {
+  let lat1_rad = lat1_deg.to_radians();
+  let lat2_rad = lat2_deg.to_radians();
+  let delta_lat = (lat2_deg - lat1_deg).to_radians();
+  let delta_lon = (lon2_deg - lon1_deg).to_radians();
+
+  let sin_lat = (delta_lat / 2.0).sin();
+  let sin_lon = (delta_lon / 2.0).sin();
+
+  let a = sin_lat * sin_lat + lat1_rad.cos() * lat2_rad.cos() * sin_lon * sin_lon;
+  let normalized_a = a.clamp(0.0, 1.0);
+  let c = 2.0 * normalized_a.sqrt().atan2((1.0 - normalized_a).sqrt());
+
+  let meters = radius_meters * c;
+
+  if meters == 0.0 {
+    return (0.0, 0.0, 0.0);
+  }
+
+  let initial = initial_bearing_from_radians(lat1_rad, lat2_rad, delta_lon);
+  let reverse = initial_bearing_from_radians(lat2_rad, lat1_rad, -delta_lon);
+  let final_bearing = normalize_bearing(reverse + 180.0);
+
+  (meters, initial, final_bearing)
+}
+
+/// Compute spherical distance and bearings using the WGS84 mean radius.
+#[cfg_attr(not(feature = "python"), allow(dead_code))]
+pub fn spherical_distance_and_bearings(lat1_deg: f64, lon1_deg: f64, lat2_deg: f64, lon2_deg: f64) -> (f64, f64, f64) {
+  spherical_distance_and_bearings_with_radius(EARTH_RADIUS_METERS, lat1_deg, lon1_deg, lat2_deg, lon2_deg)
 }
 
 /// Convert a geodetic point to its ECEF Cartesian representation.

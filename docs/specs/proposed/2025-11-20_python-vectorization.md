@@ -55,10 +55,10 @@ Use emoji for status (e.g., ✅ done, 🚧 in progress, 📝 planned, ⏸️ def
 | Priority | Task | Definition of Done | Notes | Status |
 | -------- | ---- | ------------------ | ----- | ------ |
 | P0 | Decide API surface for vectorized constructors and outputs | Docstring-level spec for functions/classes (names, args, return types, error handling, optional extras) reviewed and aligned with scalar APIs | This document is source of truth | ✅ |
-| P0 | Implement bulk point/polyline constructors over NumPy/list inputs | Rust/PyO3 entry points accept memoryview/ndarray; validation fast path with lat/lon bounds; `_geodist_rs.pyi` updated | Add unit/regression tests covering mixed valid/invalid rows | 📝 |
-| P0 | Add vectorized distance/bearing/area kernels for homogeneous batches | Support pairwise and fixed-to-many variants; return NumPy arrays (lists fallback); deterministic errors | Include GIL release and benchmarks for baseline throughput | 📝 |
-| P1 | Documentation and examples | Add user-facing guide in `pygeodist` docs with realistic examples and performance notes; update README if API is public | Include guidance on coordinate units/order and optional dependencies | 📝 |
-| P2 | Performance profiling and tuning | Benchmarks comparing scalar vs vectorized paths; identify bottlenecks and add micro-optimizations or chunk defaults | Could live under `pygeodist/devtools` and inform future tuning | 📝 |
+| P0 | Implement bulk point/polyline constructors over NumPy/list inputs | Rust/PyO3 entry points accept memoryview/ndarray; validation fast path with lat/lon bounds; `_geodist_rs.pyi` updated | Add unit/regression tests covering mixed valid/invalid rows | ✅ |
+| P0 | Add vectorized distance/bearing/area kernels for homogeneous batches | Support pairwise and fixed-to-many variants; return NumPy arrays (lists fallback); deterministic errors | Include GIL release and benchmarks for baseline throughput | ✅ |
+| P1 | Documentation and examples | Add user-facing guide in `pygeodist` docs with realistic examples and performance notes; update README if API is public | Include guidance on coordinate units/order and optional dependencies | ✅ |
+| P2 | Performance profiling and tuning | Benchmarks comparing scalar vs vectorized paths; identify bottlenecks and add micro-optimizations or chunk defaults | Bench script lives under `pygeodist/devtools/bench_vectorized.py` for ongoing tuning | 🚧 |
 | P3 | Optional Arrow/pandas interop | Evaluate zero-copy adapters once core kernels stabilize | Only proceed if requested by workloads | 📝 |
 | P3 | Optional multicore/streaming execution | Evaluate opt-in multithreading/streaming for extremely large batches without breaking determinism | Only proceed if P0/P1 performance goals unmet | 📝 |
 
@@ -78,8 +78,8 @@ _Add or remove rows as necessary while keeping priorities sorted (P0 highest)._
 
 ## Status Tracking (to be updated by subagent)
 
-- **Latest completed task:** _Decide API surface for vectorized constructors and outputs._
-- **Next up:** _Implement bulk point/polyline constructors over NumPy/list inputs._
+- **Latest completed task:** _Documentation and examples._
+- **Next up:** _Performance profiling and tuning._
 
 ## Lessons Learned (ongoing)
 
