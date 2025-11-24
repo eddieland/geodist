@@ -96,13 +96,7 @@ impl FlattenedPolyline {
 /// Densify a single polyline into ordered samples.
 pub fn densify_polyline(vertices: &[Point], options: DensificationOptions) -> Result<Vec<Point>, GeodistError> {
   options.validate()?;
-  let validator = VertexValidator::new(None);
-  validator.check_vertices(vertices)?;
-  let deduped = collapse_duplicates(vertices);
-
-  if deduped.len() < 2 {
-    return Err(GeodistError::DegeneratePolyline { part_index: None });
-  }
+  let deduped = validate_polyline(vertices, None)?;
 
   let segments = build_segments(&deduped, &options)?;
   densify_segments(&segments, &deduped, &options.sample_cap, None)
@@ -125,14 +119,7 @@ pub fn densify_multiline(
 
   for (part_index, part) in parts.iter().enumerate() {
     validator.set_part_index(part_index);
-    validator.check_vertices(part)?;
-    let deduped = collapse_duplicates(part);
-
-    if deduped.len() < 2 {
-      return Err(GeodistError::DegeneratePolyline {
-        part_index: Some(part_index),
-      });
-    }
+    let deduped = validate_polyline(part, Some(part_index))?;
 
     let segments = build_segments(&deduped, &options)?;
     // Pre-flight cap check before emitting.
@@ -296,6 +283,23 @@ pub fn collapse_duplicates(vertices: &[Point]) -> Vec<Point> {
   }
 
   deduped
+}
+
+/// Validate polyline vertices and collapse consecutive duplicates.
+///
+/// Ensures all vertices fall within valid latitude/longitude ranges and that
+/// the resulting polyline retains at least two distinct vertices. Returns the
+/// deduplicated vertices for downstream sampling.
+pub fn validate_polyline(vertices: &[Point], part_index: Option<usize>) -> Result<Vec<Point>, GeodistError> {
+  let validator = VertexValidator::new(part_index);
+  validator.check_vertices(vertices)?;
+  let deduped = collapse_duplicates(vertices);
+
+  if deduped.len() < 2 {
+    return Err(GeodistError::DegeneratePolyline { part_index });
+  }
+
+  Ok(deduped)
 }
 
 struct VertexValidator {

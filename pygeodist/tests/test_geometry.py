@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from geodist import BoundingBox, Ellipsoid, InvalidGeometryError, Point, Point3D
+from geodist import BoundingBox, Ellipsoid, InvalidGeometryError, LineString, Point, Point3D
 from geodist.geometry import Polygon
 
 
@@ -137,3 +137,25 @@ def test_polygon_accepts_exterior_and_hole() -> None:
     exterior_out, holes_out = polygon.to_tuple()
     assert len(exterior_out) == 5
     assert len(holes_out) == 1
+
+
+def test_linestring_accepts_vertices_and_to_tuple() -> None:
+    line = LineString([(0.0, 0.0), (0.0, 1.0)])
+    assert len(line) == 2
+    assert line.to_tuple() == [(0.0, 0.0), (0.0, 1.0)]
+
+
+def test_linestring_rejects_degenerate_after_dedup() -> None:
+    with pytest.raises(InvalidGeometryError):
+        LineString([(0.0, 0.0), (0.0, 0.0)])
+
+
+def test_linestring_densify_returns_expected_samples() -> None:
+    start = (0.0, 0.0)
+    end = (0.0, 0.0899)
+    line = LineString([start, end])
+
+    samples = line.densify()
+    assert len(samples) == 101
+    assert samples[0].to_tuple() == start
+    assert samples[-1].to_tuple() == pytest.approx(end)

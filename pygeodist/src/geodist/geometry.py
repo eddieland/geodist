@@ -19,6 +19,7 @@ __all__ = (
     "Point3D",
     "BoundingBox",
     "Polygon",
+    "LineString",
 )
 
 
@@ -117,6 +118,12 @@ class Point:
         if not isinstance(other, Point):
             return NotImplemented
         return self.to_tuple() == other.to_tuple()
+
+    @classmethod
+    def _from_handle(cls, handle: _geodist_rs.Point) -> "Point":
+        instance = cls.__new__(cls)
+        instance._handle = handle
+        return instance
 
 
 class Point3D:
@@ -349,3 +356,41 @@ class Polygon:
         """Return a tuple of exterior and holes for inspection."""
         exterior, holes = self._handle.to_tuple()
         return list(exterior), [list(ring) for ring in holes]
+
+
+class LineString:
+    """Immutable LineString defined by ordered vertices in degrees."""
+
+    __slots__ = ("_handle",)
+
+    def __init__(self, vertices: Sequence[Point | PointTuple]) -> None:
+        """Initialize a LineString from vertices."""
+        coords = [_coerce_point_like(vertex) for vertex in vertices]
+        self._handle = _geodist_rs.LineString(coords)
+
+    def to_tuple(self) -> list[PointTuple]:
+        """Return vertices as `(lat, lon)` tuples."""
+        return list(self._handle.to_tuple())
+
+    def densify(
+        self,
+        max_segment_length_m: float | None = 100.0,
+        max_segment_angle_deg: float | None = 0.1,
+        sample_cap: int = 50_000,
+    ) -> list[Point]:
+        """Return densified samples honoring spacing knobs and caps."""
+        samples = self._handle.densify(max_segment_length_m, max_segment_angle_deg, int(sample_cap))
+        return [Point._from_handle(sample) for sample in samples]
+
+    def __iter__(self) -> Iterator[Point]:
+        """Iterate over vertices as Point instances."""
+        for lat, lon in self.to_tuple():
+            yield Point(lat, lon)
+
+    def __len__(self) -> int:
+        """Return the number of vertices."""
+        return len(self._handle)
+
+    def __repr__(self) -> str:
+        """Return a concise representation for debugging."""
+        return f"LineString(num_vertices={len(self)})"

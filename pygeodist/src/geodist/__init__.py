@@ -22,7 +22,7 @@ from .errors import (
     InvalidLongitudeError,
     InvalidRadiusError,
 )
-from .geometry import BoundingBox, Ellipsoid, Point, Point3D, Polygon
+from .geometry import BoundingBox, Ellipsoid, LineString, Point, Point3D, Polygon
 from .ops import (
     GeodesicResult,
     HausdorffDirectedWitness,
@@ -59,6 +59,7 @@ __all__ = (
     "EmptyPointSetError",
     "BoundingBox",
     "Ellipsoid",
+    "LineString",
     "Point",
     "Point3D",
     "Polygon",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from geodist import BoundingBox, InvalidGeometryError, Point, Point3D
+from geodist import BoundingBox, InvalidGeometryError, LineString, Point, Point3D
 from geodist.ext.shapely import from_shapely, to_shapely
 
 
@@ -36,10 +36,10 @@ def test_roundtrip_converts_3d_points() -> None:
 
 
 def test_from_shapely_rejects_non_points() -> None:
-    shapely_linestring = pytest.importorskip("shapely.geometry").LineString
+    shapely_multipoint = pytest.importorskip("shapely.geometry").MultiPoint
 
     with pytest.raises(TypeError):
-        from_shapely(shapely_linestring([(0.0, 0.0), (1.0, 0.0)]))
+        from_shapely(shapely_multipoint([(0.0, 0.0), (1.0, 0.0)]))
 
 
 def test_roundtrip_converts_bounding_boxes() -> None:
@@ -65,6 +65,28 @@ def test_from_shapely_rejects_non_rectangular_polygons() -> None:
     triangle = shapely_polygon([(0.0, 0.0), (2.0, 0.0), (1.0, 3.0)])
     with pytest.raises(InvalidGeometryError):
         from_shapely(triangle)
+
+
+def test_linestring_roundtrip() -> None:
+    shapely_linestring = pytest.importorskip("shapely.geometry").LineString
+
+    line = LineString([(0.0, 0.0), (0.0, 1.0)])
+    converted = to_shapely(line)
+    assert isinstance(converted, shapely_linestring)
+    coords = list(converted.coords)
+    assert coords[0] == pytest.approx((0.0, 0.0))  # lon, lat ordering
+    assert coords[1] == pytest.approx((1.0, 0.0))
+
+    restored = from_shapely(converted)
+    assert isinstance(restored, LineString)
+    assert restored.to_tuple() == line.to_tuple()
+
+
+def test_from_shapely_rejects_3d_linestring() -> None:
+    shapely_linestring = pytest.importorskip("shapely.geometry").LineString
+
+    with pytest.raises(InvalidGeometryError):
+        from_shapely(shapely_linestring([(0.0, 0.0, 1.0), (1.0, 1.0, 2.0)]))
 
 
 def test_to_shapely_rejects_unknown_geometries() -> None:

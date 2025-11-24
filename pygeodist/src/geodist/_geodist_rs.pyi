@@ -47,6 +47,17 @@ class Polygon:
     def __init__(self, exterior: list[tuple[float, float]], holes: list[list[tuple[float, float]]]): ...
     def to_tuple(self) -> tuple[list[tuple[float, float]], list[list[tuple[float, float]]]]: ...
 
+class LineString:
+    def __init__(self, vertices: list[tuple[float, float]]): ...
+    def to_tuple(self) -> list[tuple[float, float]]: ...
+    def densify(
+        self,
+        max_segment_length_m: float | None = ...,
+        max_segment_angle_deg: float | None = ...,
+        sample_cap: int = ...,
+    ) -> list[Point]: ...
+    def __len__(self) -> int: ...
+
 class GeodesicSolution:
     distance_m: float
     initial_bearing_deg: float
@@ -157,6 +168,7 @@ __all__ = [
     "Point",
     "Point3D",
     "Polygon",
+    "LineString",
     "GeodesicSolution",
     "HausdorffDirectedWitness",
     "HausdorffWitness",

@@ -8,8 +8,18 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from ..errors import InvalidGeometryError
-from ..geometry import BoundingBox, Point, Point3D
+from ..geometry import BoundingBox, LineString, Point, Point3D
 
+try:
+    from shapely.geometry import LineString as ShapelyLineString
+    from shapely.geometry import Point as ShapelyPoint
+    from shapely.geometry import Polygon as ShapelyPolygon
+    from shapely.geometry import box as shapely_box
+except ModuleNotFoundError as exc:
+    raise ImportError(
+        "Shapely is required for interop helpers; install the optional extra with "
+        "`pip install pygeodist[shapely]` or add `shapely` to your environment."
+    ) from exc
 __all__ = ("from_shapely", "to_shapely")
 
 
@@ -30,41 +40,30 @@ class _PolygonLike(Protocol):
     def equals(self, other: Any) -> bool: ...
 
 
-def _import_shapely_geometry() -> tuple[type[Any], type[Any], Any]:
-    try:
-        from shapely.geometry import Point as ShapelyPoint
-        from shapely.geometry import Polygon as ShapelyPolygon
-        from shapely.geometry import box as shapely_box
-    except ModuleNotFoundError as exc:
-        raise ImportError(
-            "Shapely is required for interop helpers; install the optional extra with "
-            "`pip install pygeodist[shapely]` or add `shapely` to your environment."
-        ) from exc
-    return ShapelyPoint, ShapelyPolygon, shapely_box
-
-
-def to_shapely(geometry: Point | Point3D | BoundingBox) -> Any:
+def to_shapely(geometry: Point | Point3D | BoundingBox | LineString) -> Any:
     """Convert a geodist geometry into the matching Shapely shape."""
-    shapely_point, _, shapely_box = _import_shapely_geometry()
     if isinstance(geometry, Point):
         latitude, longitude = geometry.to_tuple()
-        return shapely_point(longitude, latitude)
+        return ShapelyPoint(longitude, latitude)
     if isinstance(geometry, Point3D):
         latitude, longitude, altitude_m = geometry.to_tuple()
-        return shapely_point(longitude, latitude, altitude_m)
+        return ShapelyPoint(longitude, latitude, altitude_m)
     if isinstance(geometry, BoundingBox):
         min_lat, max_lat, min_lon, max_lon = geometry.to_tuple()
         return shapely_box(min_lon, min_lat, max_lon, max_lat)
+    if isinstance(geometry, LineString):
+        coords = [(lon, lat) for lat, lon in geometry.to_tuple()]
+        return ShapelyLineString(coords)
 
     raise TypeError(
-        f"to_shapely expects a geodist geometry type (Point, Point3D, BoundingBox), got {type(geometry).__name__}",
+        "to_shapely expects a geodist geometry type (Point, Point3D, LineString, BoundingBox), "
+        f"got {type(geometry).__name__}",
     )
 
 
-def from_shapely(geometry: _PointLike | _PolygonLike) -> Point | Point3D | BoundingBox:
+def from_shapely(geometry: _PointLike | _PolygonLike) -> Point | Point3D | BoundingBox | LineString:
     """Convert a Shapely geometry into a geodist geometry."""
-    shapely_point, shapely_polygon, shapely_box = _import_shapely_geometry()
-    if isinstance(geometry, shapely_point):
+    if isinstance(geometry, ShapelyPoint):
         latitude: float = float(geometry.y)
         longitude: float = float(geometry.x)
         if getattr(geometry, "has_z", False):
@@ -72,7 +71,13 @@ def from_shapely(geometry: _PointLike | _PolygonLike) -> Point | Point3D | Bound
             return Point3D(latitude, longitude, altitude_m)
         return Point(latitude, longitude)
 
-    if isinstance(geometry, shapely_polygon):
+    if isinstance(geometry, ShapelyLineString):
+        if getattr(geometry, "has_z", False):
+            raise InvalidGeometryError("3D LineStrings are not supported; drop Z or flatten before converting.")
+        coords = [(float(lat), float(lon)) for lon, lat in geometry.coords]
+        return LineString(coords)
+
+    if isinstance(geometry, ShapelyPolygon):
         min_lon, min_lat, max_lon, max_lat = geometry.bounds
         rectangle = shapely_box(min_lon, min_lat, max_lon, max_lat)
         if not geometry.equals(rectangle):

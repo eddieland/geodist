@@ -214,6 +214,13 @@ pub struct Polygon {
   inner: polygon_kernel::Polygon,
 }
 
+/// LineString/Polyline wrapper.
+#[pyclass(name = "LineString", frozen)]
+#[derive(Debug, Clone)]
+pub struct Polyline {
+  vertices: Vec<types::Point>,
+}
+
 #[pymethods]
 impl Polygon {
   #[new]
@@ -248,6 +255,55 @@ impl Polygon {
       .map(|ring| ring.iter().map(|p| (p.lat, p.lon)).collect())
       .collect();
     (exterior, holes)
+  }
+}
+
+#[pymethods]
+impl Polyline {
+  #[new]
+  pub fn new(vertices: Vec<(f64, f64)>) -> PyResult<Self> {
+    let points = map_to_points_from_tuples(&vertices)?;
+    let deduped = map_geodist_result(polyline::validate_polyline(&points, None))?;
+    Ok(Self { vertices: deduped })
+  }
+
+  /// Return the vertices as `(lat, lon)` tuples.
+  pub fn to_tuple(&self) -> Vec<(f64, f64)> {
+    self.vertices.iter().map(|vertex| (vertex.lat, vertex.lon)).collect()
+  }
+
+  /// Densify the LineString into samples honoring spacing knobs and caps.
+  #[pyo3(signature = (max_segment_length_m = Some(100.0), max_segment_angle_deg = Some(0.1), sample_cap = 50_000))]
+  pub fn densify(
+    &self,
+    max_segment_length_m: Option<f64>,
+    max_segment_angle_deg: Option<f64>,
+    sample_cap: usize,
+  ) -> PyResult<Vec<Point>> {
+    let options = polyline::DensificationOptions {
+      max_segment_length_m,
+      max_segment_angle_deg,
+      sample_cap,
+    };
+    let samples = map_geodist_result(polyline::densify_polyline(&self.vertices, options))?;
+
+    Ok(
+      samples
+        .into_iter()
+        .map(|vertex| Point {
+          lat: vertex.lat,
+          lon: vertex.lon,
+        })
+        .collect(),
+    )
+  }
+
+  fn __repr__(&self) -> String {
+    format!("LineString(num_vertices={})", self.vertices.len())
+  }
+
+  const fn __len__(&self) -> PyResult<usize> {
+    Ok(self.vertices.len())
   }
 }
 
@@ -357,6 +413,7 @@ impl BoundingBox {
   }
 }
 
+#[allow(unreachable_patterns)]
 fn map_geodist_error(err: types::GeodistError) -> PyErr {
   let message = err.to_string();
 
@@ -369,6 +426,10 @@ fn map_geodist_error(err: types::GeodistError) -> PyErr {
     types::GeodistError::InvalidEllipsoid { .. } => InvalidEllipsoidError::new_err(message),
     types::GeodistError::InvalidBoundingBox { .. } => InvalidBoundingBoxError::new_err(message),
     types::GeodistError::EmptyPointSet => EmptyPointSetError::new_err(message),
+    types::GeodistError::MissingDensificationKnob
+    | types::GeodistError::DegeneratePolyline { .. }
+    | types::GeodistError::InvalidVertex { .. }
+    | types::GeodistError::SampleCapExceeded { .. } => InvalidGeometryError::new_err(message),
     _ => GeodistError::new_err(message),
   }
 }
@@ -1218,6 +1279,7 @@ fn _geodist_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add_class::<Point>()?;
   m.add_class::<Point3D>()?;
   m.add_class::<Polygon>()?;
+  m.add_class::<Polyline>()?;
   m.add_class::<GeodesicSolution>()?;
   m.add_class::<BoundingBox>()?;
   m.add_class::<HausdorffDirectedWitness>()?;

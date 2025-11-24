@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from geodist import (
     EARTH_RADIUS_METERS,
+    BoundingBox,
     Point,
     Point3D,
     geodesic_distance,
@@ -18,7 +19,6 @@ from geodist import (
     hausdorff_clipped,
     hausdorff_directed,
     hausdorff_directed_clipped,
-    BoundingBox,
 )
 from geodist import (
     hausdorff as hausdorff_sym,
