@@ -13,8 +13,8 @@ use geographiclib_rs::{
 use pyo3::buffer::{PyBuffer, ReadOnlyCell};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyModule;
-use pyo3::{PyErr, create_exception, wrap_pyfunction};
+use pyo3::types::{PyModule, PyTuple};
+use pyo3::{IntoPyObject, Py, PyErr, PyRef, create_exception, wrap_pyfunction};
 
 use crate::constants::{EARTH_RADIUS_METERS, MAX_LAT_DEGREES, MAX_LON_DEGREES, MIN_LAT_DEGREES, MIN_LON_DEGREES};
 use crate::{distance, hausdorff as hausdorff_kernel, polygon as polygon_kernel, polyline, types};
@@ -104,6 +104,75 @@ impl HausdorffWitness {
       "HausdorffWitness(distance_m={}, a_to_b=(distance_m={}, origin_index={}, candidate_index={}), \
        b_to_a=(distance_m={}, origin_index={}, candidate_index={}))",
       dist, a_dist, a_origin, a_candidate, b_dist, b_origin, b_candidate
+    )
+  }
+}
+
+#[pyclass(frozen)]
+#[derive(Debug, Clone)]
+pub struct PolylineWitness {
+  #[pyo3(get)]
+  distance_m: f64,
+  #[pyo3(get)]
+  source_part: usize,
+  #[pyo3(get)]
+  source_index: usize,
+  #[pyo3(get)]
+  target_part: usize,
+  #[pyo3(get)]
+  target_index: usize,
+  #[pyo3(get)]
+  source_coord: (f64, f64),
+  #[pyo3(get)]
+  target_coord: (f64, f64),
+}
+
+type PolylineWitnessTuple = (f64, usize, usize, usize, usize, (f64, f64), (f64, f64));
+
+impl From<polyline::PolylineWitness> for PolylineWitness {
+  fn from(value: polyline::PolylineWitness) -> Self {
+    let source = value.source_coord();
+    let target = value.target_coord();
+    Self {
+      distance_m: value.distance().meters(),
+      source_part: value.source_part(),
+      source_index: value.source_index(),
+      target_part: value.target_part(),
+      target_index: value.target_index(),
+      source_coord: (source.lat, source.lon),
+      target_coord: (target.lat, target.lon),
+    }
+  }
+}
+
+#[pymethods]
+impl PolylineWitness {
+  /// Return a tuple `(distance_m, source_part, source_index, target_part,
+  /// target_index, source_coord, target_coord)`.
+  pub const fn to_tuple(&self) -> PolylineWitnessTuple {
+    (
+      self.distance_m,
+      self.source_part,
+      self.source_index,
+      self.target_part,
+      self.target_index,
+      self.source_coord,
+      self.target_coord,
+    )
+  }
+
+  fn __repr__(&self) -> String {
+    format!(
+      "PolylineWitness(distance_m={}, source_part={}, source_index={}, target_part={}, target_index={}, source_coord=({}, {}), target_coord=({}, {}))",
+      self.distance_m,
+      self.source_part,
+      self.source_index,
+      self.target_part,
+      self.target_index,
+      self.source_coord.0,
+      self.source_coord.1,
+      self.target_coord.0,
+      self.target_coord.1
     )
   }
 }
@@ -496,6 +565,67 @@ fn map_boundary_densification_opts(
   })
 }
 
+fn map_polyline_options(
+  symmetric: bool,
+  bounding_box: Option<&BoundingBox>,
+  max_segment_length_m: Option<f64>,
+  max_segment_angle_deg: Option<f64>,
+  sample_cap: usize,
+  return_witness: bool,
+) -> PyResult<polyline::PolylineHausdorffOptions> {
+  if max_segment_length_m.is_none() && max_segment_angle_deg.is_none() {
+    return Err(InvalidGeometryError::new_err(
+      "polyline densification requires max_segment_length_m or max_segment_angle_deg",
+    ));
+  }
+
+  let bbox = match bounding_box {
+    Some(handle) => Some(map_to_bounding_box(handle)?),
+    None => None,
+  };
+
+  Ok(polyline::PolylineHausdorffOptions {
+    symmetric,
+    bounding_box: bbox,
+    return_witness,
+    max_segment_length_m,
+    max_segment_angle_deg,
+    sample_cap,
+  })
+}
+
+fn map_polyline_part(coords: &[(f64, f64)], _part_index: usize) -> PyResult<Vec<types::Point>> {
+  map_to_points_from_tuples(coords)
+}
+
+fn load_polyline_parts(polyline: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<Vec<types::Point>>> {
+  if let Ok(handle) = polyline.extract::<PyRef<'_, Polyline>>() {
+    return Ok(vec![handle.vertices.clone()]);
+  }
+
+  if let Ok(single) = polyline.extract::<Vec<(f64, f64)>>() {
+    let mapped = map_polyline_part(&single, 0)?;
+    return Ok(vec![mapped]);
+  }
+
+  if let Ok(parts) = polyline.extract::<Vec<Vec<(f64, f64)>>>() {
+    let mut mapped = Vec::with_capacity(parts.len());
+    for (idx, part) in parts.iter().enumerate() {
+      mapped.push(map_polyline_part(part, idx)?);
+    }
+    return Ok(mapped);
+  }
+
+  Err(PyValueError::new_err(format!(
+    "{name} must be a LineString or a sequence of (lat, lon) coordinate arrays"
+  )))
+}
+
+fn polyline_witness_to_py(py: Python<'_>, witness: &polyline::PolylineWitness) -> PyResult<Py<PyAny>> {
+  let payload: PolylineWitness = (*witness).into();
+  Py::new(py, payload).map(|obj| obj.into())
+}
+
 #[pyfunction]
 fn geodesic_distance(p1: &Point, p2: &Point) -> PyResult<f64> {
   let origin = map_to_point(p1)?;
@@ -554,6 +684,59 @@ fn hausdorff_directed(a: Vec<Point>, b: Vec<Point>) -> PyResult<HausdorffDirecte
   hausdorff_kernel::hausdorff_directed(&points_a, &points_b)
     .map(HausdorffDirectedWitness::from)
     .map_err(map_geodist_error)
+}
+
+#[pyfunction]
+#[pyo3(
+  signature = (
+    polyline_a,
+    polyline_b,
+    *,
+    symmetric = true,
+    bbox = None,
+    max_segment_length_m = Some(100.0),
+    max_segment_angle_deg = Some(0.1),
+    sample_cap = 50_000,
+    return_witness = false
+  )
+)]
+#[allow(clippy::too_many_arguments)]
+fn hausdorff_polyline(
+  py: Python<'_>,
+  polyline_a: &Bound<'_, PyAny>,
+  polyline_b: &Bound<'_, PyAny>,
+  symmetric: bool,
+  bbox: Option<&BoundingBox>,
+  max_segment_length_m: Option<f64>,
+  max_segment_angle_deg: Option<f64>,
+  sample_cap: usize,
+  return_witness: bool,
+) -> PyResult<Py<PyAny>> {
+  let parts_a = load_polyline_parts(polyline_a, "polyline_a")?;
+  let parts_b = load_polyline_parts(polyline_b, "polyline_b")?;
+  let options = map_polyline_options(
+    symmetric,
+    bbox,
+    max_segment_length_m,
+    max_segment_angle_deg,
+    sample_cap,
+    return_witness,
+  )?;
+
+  let result = polyline::hausdorff_polyline(&parts_a, &parts_b, options).map_err(map_geodist_error)?;
+  if !return_witness {
+    let distance = result.distance().meters().into_pyobject(py)?;
+    return Ok(distance.unbind().into());
+  }
+
+  let witness = match result.witness() {
+    Some(payload) => polyline_witness_to_py(py, &payload)?,
+    None => py.None(),
+  };
+
+  let distance = result.distance().meters().into_pyobject(py)?.unbind().into();
+  let payload = PyTuple::new(py, [distance, witness])?;
+  Ok(payload.unbind().into())
 }
 
 #[pyfunction]
@@ -1291,6 +1474,7 @@ fn _geodist_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
   m.add_function(wrap_pyfunction!(geodesic_with_bearings_on_ellipsoid, m)?)?;
   m.add_function(wrap_pyfunction!(geodesic_distance_3d, m)?)?;
   m.add_function(wrap_pyfunction!(hausdorff_directed, m)?)?;
+  m.add_function(wrap_pyfunction!(hausdorff_polyline, m)?)?;
   m.add_function(wrap_pyfunction!(hausdorff, m)?)?;
   m.add_function(wrap_pyfunction!(hausdorff_directed_clipped, m)?)?;
   m.add_function(wrap_pyfunction!(hausdorff_clipped, m)?)?;

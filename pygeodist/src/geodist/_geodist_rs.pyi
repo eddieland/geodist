@@ -4,7 +4,7 @@ Exports stay intentionally small while Rust-backed geometry wrappers are built.
 Keep this stub in sync with `geodist-rs/src/python.rs`.
 """
 
-from typing import Final
+from typing import Final, Literal, overload
 
 EARTH_RADIUS_METERS: Final[float]
 
@@ -85,6 +85,27 @@ class HausdorffWitness:
         tuple[float, int, int],
     ]: ...
 
+class PolylineWitness:
+    distance_m: float
+    source_part: int
+    source_index: int
+    target_part: int
+    target_index: int
+    source_coord: tuple[float, float]
+    target_coord: tuple[float, float]
+
+    def to_tuple(
+        self,
+    ) -> tuple[
+        float,
+        int,
+        int,
+        int,
+        int,
+        tuple[float, float],
+        tuple[float, float],
+    ]: ...
+
 class BoundingBox:
     min_lat: float
     max_lat: float
@@ -106,6 +127,42 @@ def geodesic_with_bearings(p1: Point, p2: Point) -> GeodesicSolution: ...
 def geodesic_with_bearings_on_ellipsoid(p1: Point, p2: Point, ellipsoid: Ellipsoid) -> GeodesicSolution: ...
 def geodesic_distance_3d(p1: Point3D, p2: Point3D) -> float: ...
 def hausdorff_directed(a: list[Point], b: list[Point]) -> HausdorffDirectedWitness: ...
+@overload
+def hausdorff_polyline(
+    polyline_a: list[list[tuple[float, float]]] | list[tuple[float, float]] | LineString,
+    polyline_b: list[list[tuple[float, float]]] | list[tuple[float, float]] | LineString,
+    *,
+    symmetric: bool = ...,
+    bbox: BoundingBox | None = ...,
+    max_segment_length_m: float | None = ...,
+    max_segment_angle_deg: float | None = ...,
+    sample_cap: int = ...,
+    return_witness: Literal[False] = ...,
+) -> float: ...
+@overload
+def hausdorff_polyline(
+    polyline_a: list[list[tuple[float, float]]] | list[tuple[float, float]] | LineString,
+    polyline_b: list[list[tuple[float, float]]] | list[tuple[float, float]] | LineString,
+    *,
+    symmetric: bool = ...,
+    bbox: BoundingBox | None = ...,
+    max_segment_length_m: float | None = ...,
+    max_segment_angle_deg: float | None = ...,
+    sample_cap: int = ...,
+    return_witness: Literal[True],
+) -> tuple[float, PolylineWitness | None]: ...
+@overload
+def hausdorff_polyline(
+    polyline_a: list[list[tuple[float, float]]] | list[tuple[float, float]] | LineString,
+    polyline_b: list[list[tuple[float, float]]] | list[tuple[float, float]] | LineString,
+    *,
+    symmetric: bool = ...,
+    bbox: BoundingBox | None = ...,
+    max_segment_length_m: float | None = ...,
+    max_segment_angle_deg: float | None = ...,
+    sample_cap: int = ...,
+    return_witness: bool = ...,
+) -> float | tuple[float, PolylineWitness | None]: ...
 def hausdorff(a: list[Point], b: list[Point]) -> HausdorffWitness: ...
 def hausdorff_directed_clipped(
     a: list[Point], b: list[Point], bounding_box: BoundingBox
@@ -172,6 +229,7 @@ __all__ = [
     "GeodesicSolution",
     "HausdorffDirectedWitness",
     "HausdorffWitness",
+    "PolylineWitness",
     "BoundingBox",
     "geodesic_distance",
     "geodesic_distance_on_ellipsoid",
@@ -179,6 +237,7 @@ __all__ = [
     "geodesic_with_bearings",
     "geodesic_with_bearings_on_ellipsoid",
     "hausdorff_directed",
+    "hausdorff_polyline",
     "hausdorff",
     "hausdorff_directed_clipped",
     "hausdorff_clipped",

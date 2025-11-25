@@ -62,7 +62,10 @@ pub use hausdorff::{
 pub use polygon::{
   BoundaryDirectedWitness, BoundaryHausdorffWitness, Polygon, hausdorff_boundary, hausdorff_boundary_directed,
 };
-pub use polyline::{DensificationOptions, FlattenedPolyline, densify_multiline, densify_polyline};
+pub use polyline::{
+  DensificationOptions, FlattenedPolyline, PolylineHausdorffOptions, PolylineHausdorffResult, PolylineWitness,
+  densify_multiline, densify_polyline, hausdorff_polyline,
+};
 pub use types::{
   BoundingBox, Distance, Ellipsoid, GeodistError, Point, Point3D, RingOrientation, VertexValidationError,
 };

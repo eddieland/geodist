@@ -37,17 +37,22 @@ vectorized = ["numpy>=1.24"]
 
 [dependency-groups]
 dev = [
-    "codespell>=2.4.1",
+    # build
     "maturin>=1.10,<1.11",
-    "mypy>=1.14.1",
-    "numpy>=2,<3",
-    "pytest-sugar>=1.0.0",
+    # test
     "pytest>=8.3.5",
-    "rich>=14.0.0",
-    "ruff>=0.14.6",
+    "pytest-sugar>=1.0.0",
+    "numpy>=2,<3",
     "shapely>=2.0,<3.0",
-    "typer>=0.15.0",
+    # lint
+    "codespell>=2.4.1",
+    "mypy>=1.14.1",
+    "ruff>=0.14.6",
+    # mypy stub packages
     "types-shapely>=2.1.0.20250917",
+    # devtools
+    "rich>=14.0.0",
+    "typer>=0.15.0",
 ]
 
 # ---- Build system ----

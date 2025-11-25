@@ -7,9 +7,11 @@
 
 use std::f64::consts::PI;
 
+use rstar::{AABB, PointDistance, RTree, RTreeObject};
+
 use crate::constants::EARTH_RADIUS_METERS;
 use crate::distance::geodesic_distance;
-use crate::{GeodistError, Point, VertexValidationError};
+use crate::{BoundingBox, Distance, GeodistError, Point, VertexValidationError};
 
 /// Options controlling polyline densification.
 ///
@@ -120,6 +122,136 @@ impl FlattenedPolyline {
   }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PolylineHausdorffOptions {
+  pub symmetric: bool,
+  pub bounding_box: Option<BoundingBox>,
+  pub return_witness: bool,
+  pub max_segment_length_m: Option<f64>,
+  pub max_segment_angle_deg: Option<f64>,
+  pub sample_cap: usize,
+}
+
+impl Default for PolylineHausdorffOptions {
+  fn default() -> Self {
+    Self {
+      symmetric: true,
+      bounding_box: None,
+      return_witness: false,
+      max_segment_length_m: Some(100.0),
+      max_segment_angle_deg: Some(0.1),
+      sample_cap: 50_000,
+    }
+  }
+}
+
+impl PolylineHausdorffOptions {
+  pub const fn densification_options(&self) -> DensificationOptions {
+    DensificationOptions {
+      max_segment_length_m: self.max_segment_length_m,
+      max_segment_angle_deg: self.max_segment_angle_deg,
+      sample_cap: self.sample_cap,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PolylineWitness {
+  distance: Distance,
+  source_part: usize,
+  source_index: usize,
+  target_part: usize,
+  target_index: usize,
+  source_coord: Point,
+  target_coord: Point,
+}
+
+impl PolylineWitness {
+  pub const fn distance(&self) -> Distance {
+    self.distance
+  }
+
+  pub const fn source_part(&self) -> usize {
+    self.source_part
+  }
+
+  pub const fn source_index(&self) -> usize {
+    self.source_index
+  }
+
+  pub const fn target_part(&self) -> usize {
+    self.target_part
+  }
+
+  pub const fn target_index(&self) -> usize {
+    self.target_index
+  }
+
+  pub const fn source_coord(&self) -> Point {
+    self.source_coord
+  }
+
+  pub const fn target_coord(&self) -> Point {
+    self.target_coord
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PolylineHausdorffResult {
+  distance: Distance,
+  witness: Option<PolylineWitness>,
+}
+
+impl PolylineHausdorffResult {
+  pub const fn distance(&self) -> Distance {
+    self.distance
+  }
+
+  pub const fn witness(&self) -> Option<PolylineWitness> {
+    self.witness
+  }
+}
+
+/// Directed or symmetric Hausdorff distance over polylines and
+/// MultiLineStrings.
+///
+/// Inputs are supplied as collections of parts, where each part contains
+/// ordered vertices `(lat, lon)` in degrees. Densification follows
+/// [`DensificationOptions`] and preserves part offsets for witness mapping.
+/// When `options.symmetric` is `true` (default), returns the dominant
+/// direction; otherwise evaluates A→B only.
+pub fn hausdorff_polyline(
+  polyline_a: &[Vec<Point>],
+  polyline_b: &[Vec<Point>],
+  options: PolylineHausdorffOptions,
+) -> Result<PolylineHausdorffResult, GeodistError> {
+  let densification = options.densification_options();
+  let samples_a = densify_multiline(polyline_a, densification)?;
+  let samples_b = densify_multiline(polyline_b, densification)?;
+
+  let clipped_a = clip_if_needed(samples_a, options.bounding_box)?;
+  let clipped_b = clip_if_needed(samples_b, options.bounding_box)?;
+
+  let enumerated_a = enumerate_samples(&clipped_a);
+  let enumerated_b = enumerate_samples(&clipped_b);
+
+  if options.symmetric {
+    let forward = hausdorff_directed_polyline(&enumerated_a, &enumerated_b)?;
+    let reverse = hausdorff_directed_polyline(&enumerated_b, &enumerated_a)?;
+    let dominant = pick_symmetric_witness(forward, reverse);
+    let distance = Distance::from_meters(dominant.distance_m)?;
+    let witness = options.return_witness.then(|| map_directed_witness(dominant));
+
+    return Ok(PolylineHausdorffResult { distance, witness });
+  }
+
+  let directed = hausdorff_directed_polyline(&enumerated_a, &enumerated_b)?;
+  let distance = Distance::from_meters(directed.distance_m)?;
+  let witness = options.return_witness.then(|| map_directed_witness(directed));
+
+  Ok(PolylineHausdorffResult { distance, witness })
+}
+
 /// Densify a single polyline into ordered samples.
 ///
 /// Collapses consecutive duplicate vertices, validates latitude/longitude
@@ -198,6 +330,257 @@ fn densify_multiline_with_geometry<G: SegmentGeometry>(
     samples: result,
     part_offsets: offsets,
   })
+}
+
+const WITNESS_DISTANCE_TOLERANCE_M: f64 = 1e-12;
+const MIN_INDEXED_POLYLINE_SIZE: usize = 32;
+const MAX_NAIVE_CROSS_PRODUCT: usize = 4_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HausdorffStrategy {
+  Naive,
+  Indexed,
+}
+
+#[derive(Clone, Copy)]
+struct PolylineSample {
+  point: Point,
+  part_index: usize,
+  vertex_index: usize,
+}
+
+#[derive(Clone, Copy)]
+struct DirectedPolylineWitness {
+  distance_m: f64,
+  source: PolylineSample,
+  target: PolylineSample,
+}
+
+fn clip_if_needed(
+  polyline: FlattenedPolyline,
+  bounding_box: Option<BoundingBox>,
+) -> Result<FlattenedPolyline, GeodistError> {
+  if let Some(bbox) = bounding_box {
+    return polyline.clip(&bbox);
+  }
+  Ok(polyline)
+}
+
+fn enumerate_samples(polyline: &FlattenedPolyline) -> Vec<PolylineSample> {
+  let mut samples = Vec::with_capacity(polyline.samples.len());
+  for (part_index, window) in polyline.part_offsets.windows(2).enumerate() {
+    let start = window[0];
+    let end = window[1];
+    for (vertex_index, point) in polyline.samples[start..end].iter().copied().enumerate() {
+      samples.push(PolylineSample {
+        point,
+        part_index,
+        vertex_index,
+      });
+    }
+  }
+  samples
+}
+
+fn pick_symmetric_witness(a_to_b: DirectedPolylineWitness, b_to_a: DirectedPolylineWitness) -> DirectedPolylineWitness {
+  let diff = (a_to_b.distance_m - b_to_a.distance_m).abs();
+  if diff <= WITNESS_DISTANCE_TOLERANCE_M {
+    return a_to_b;
+  }
+
+  if a_to_b.distance_m > b_to_a.distance_m {
+    return a_to_b;
+  }
+
+  b_to_a
+}
+
+const fn map_directed_witness(witness: DirectedPolylineWitness) -> PolylineWitness {
+  PolylineWitness {
+    distance: Distance::from_meters_unchecked(witness.distance_m),
+    source_part: witness.source.part_index,
+    source_index: witness.source.vertex_index,
+    target_part: witness.target.part_index,
+    target_index: witness.target.vertex_index,
+    source_coord: witness.source.point,
+    target_coord: witness.target.point,
+  }
+}
+
+fn hausdorff_directed_polyline(
+  origins: &[PolylineSample],
+  candidates: &[PolylineSample],
+) -> Result<DirectedPolylineWitness, GeodistError> {
+  if origins.is_empty() || candidates.is_empty() {
+    return Err(GeodistError::EmptyPointSet);
+  }
+
+  let strategy = choose_strategy(origins.len(), candidates.len());
+  match strategy {
+    HausdorffStrategy::Naive => hausdorff_directed_polyline_naive(origins, candidates),
+    HausdorffStrategy::Indexed => hausdorff_directed_polyline_indexed(origins, candidates),
+  }
+}
+
+fn hausdorff_directed_polyline_naive(
+  origins: &[PolylineSample],
+  candidates: &[PolylineSample],
+) -> Result<DirectedPolylineWitness, GeodistError> {
+  let mut best: Option<DirectedPolylineWitness> = None;
+
+  for origin in origins {
+    let mut nearest: Option<DirectedPolylineWitness> = None;
+    for candidate in candidates {
+      let witness = directed_witness(origin, candidate)?;
+      nearest = match nearest {
+        Some(current) if prefers_target(current, witness) => Some(witness),
+        None => Some(witness),
+        Some(current) => Some(current),
+      };
+    }
+
+    if let Some(nearest_witness) = nearest {
+      best = match best {
+        Some(current) if prefers_worse_witness(current, nearest_witness) => Some(nearest_witness),
+        None => Some(nearest_witness),
+        Some(current) => Some(current),
+      };
+    }
+  }
+
+  best.ok_or(GeodistError::EmptyPointSet)
+}
+
+fn hausdorff_directed_polyline_indexed(
+  origins: &[PolylineSample],
+  candidates: &[PolylineSample],
+) -> Result<DirectedPolylineWitness, GeodistError> {
+  let index = RTree::bulk_load(build_indexed_points(candidates));
+  let mut best: Option<DirectedPolylineWitness> = None;
+
+  for origin in origins {
+    let query = [origin.point.lon, origin.point.lat];
+    let mut iter = index.nearest_neighbor_iter(&query);
+    let Some(first) = iter.next() else {
+      return Err(GeodistError::EmptyPointSet);
+    };
+
+    let mut nearest = directed_witness(origin, &first.sample)?;
+    for candidate in iter {
+      let witness = directed_witness(origin, &candidate.sample)?;
+      if witness.distance_m + WITNESS_DISTANCE_TOLERANCE_M < nearest.distance_m {
+        nearest = witness;
+        continue;
+      }
+      if (witness.distance_m - nearest.distance_m).abs() <= WITNESS_DISTANCE_TOLERANCE_M {
+        if prefers_target(nearest, witness) {
+          nearest = witness;
+        }
+        continue;
+      }
+      if witness.distance_m > nearest.distance_m + WITNESS_DISTANCE_TOLERANCE_M {
+        break;
+      }
+    }
+
+    best = match best {
+      Some(current) if prefers_worse_witness(current, nearest) => Some(nearest),
+      None => Some(nearest),
+      Some(current) => Some(current),
+    };
+  }
+
+  best.ok_or(GeodistError::EmptyPointSet)
+}
+
+fn directed_witness(
+  origin: &PolylineSample,
+  candidate: &PolylineSample,
+) -> Result<DirectedPolylineWitness, GeodistError> {
+  let distance_m = geodesic_distance(origin.point, candidate.point)?.meters();
+  Ok(DirectedPolylineWitness {
+    distance_m,
+    source: *origin,
+    target: *candidate,
+  })
+}
+
+fn prefers_target(current: DirectedPolylineWitness, candidate: DirectedPolylineWitness) -> bool {
+  if candidate.distance_m + WITNESS_DISTANCE_TOLERANCE_M < current.distance_m {
+    return true;
+  }
+
+  (candidate.distance_m - current.distance_m).abs() <= WITNESS_DISTANCE_TOLERANCE_M
+    && (candidate.target.part_index < current.target.part_index
+      || (candidate.target.part_index == current.target.part_index
+        && candidate.target.vertex_index < current.target.vertex_index))
+}
+
+fn prefers_worse_witness(current: DirectedPolylineWitness, candidate: DirectedPolylineWitness) -> bool {
+  if candidate.distance_m > current.distance_m + WITNESS_DISTANCE_TOLERANCE_M {
+    return true;
+  }
+
+  (candidate.distance_m - current.distance_m).abs() <= WITNESS_DISTANCE_TOLERANCE_M
+    && (candidate.source.part_index < current.source.part_index
+      || (candidate.source.part_index == current.source.part_index
+        && (candidate.source.vertex_index < current.source.vertex_index
+          || (candidate.source.vertex_index == current.source.vertex_index
+            && (candidate.target.part_index < current.target.part_index
+              || (candidate.target.part_index == current.target.part_index
+                && candidate.target.vertex_index < current.target.vertex_index))))))
+}
+
+fn choose_strategy(a_len: usize, b_len: usize) -> HausdorffStrategy {
+  if should_use_naive(a_len, b_len) {
+    HausdorffStrategy::Naive
+  } else {
+    HausdorffStrategy::Indexed
+  }
+}
+
+fn should_use_naive(a_len: usize, b_len: usize) -> bool {
+  let min_size = a_len.min(b_len);
+  let cross_product = a_len.saturating_mul(b_len);
+  min_size < MIN_INDEXED_POLYLINE_SIZE || cross_product <= MAX_NAIVE_CROSS_PRODUCT
+}
+
+fn build_indexed_points(samples: &[PolylineSample]) -> Vec<IndexedPolylinePoint> {
+  samples
+    .iter()
+    .copied()
+    .map(|sample| IndexedPolylinePoint { sample })
+    .collect()
+}
+
+#[derive(Clone, Copy)]
+struct IndexedPolylinePoint {
+  sample: PolylineSample,
+}
+
+impl RTreeObject for IndexedPolylinePoint {
+  type Envelope = AABB<[f64; 2]>;
+
+  fn envelope(&self) -> Self::Envelope {
+    AABB::from_point([self.sample.point.lon, self.sample.point.lat])
+  }
+}
+
+impl PointDistance for IndexedPolylinePoint {
+  fn distance_2(&self, point: &[f64; 2]) -> f64 {
+    let query = Point {
+      lat: point[1],
+      lon: point[0],
+    };
+
+    match geodesic_distance(self.sample.point, query) {
+      Ok(distance) => {
+        let meters = distance.meters();
+        meters * meters
+      }
+      Err(_) => f64::INFINITY,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -541,6 +924,62 @@ mod tests {
 
     let empty_box = crate::BoundingBox::new(-1.0, 1.0, 50.0, 60.0).unwrap();
     let result = clipped.clip(&empty_box);
+    assert!(matches!(result, Err(GeodistError::EmptyPointSet)));
+  }
+
+  #[test]
+  fn polyline_hausdorff_returns_witness_for_parallel_shift() {
+    let line_a = vec![Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 1.0).unwrap()];
+    let line_b = vec![Point::new(1.0, 0.0).unwrap(), Point::new(1.0, 1.0).unwrap()];
+
+    let options = PolylineHausdorffOptions {
+      max_segment_length_m: Some(200_000.0),
+      max_segment_angle_deg: None,
+      return_witness: true,
+      ..Default::default()
+    };
+
+    let result = hausdorff_polyline(&[line_a], &[line_b], options).unwrap();
+    let witness = result.witness().expect("witness requested");
+    assert_eq!(witness.source_part(), 0);
+    assert_eq!(witness.target_part(), 0);
+    assert_eq!(witness.source_index(), 0);
+    assert_eq!(witness.target_index(), 0);
+    assert!(witness.distance().meters() > 100_000.0);
+  }
+
+  #[test]
+  fn polyline_hausdorff_tracks_multiline_parts() {
+    let near = vec![Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 0.1).unwrap()];
+    let far = vec![Point::new(5.0, 0.0).unwrap(), Point::new(5.0, 0.1).unwrap()];
+    let anchor = vec![Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 0.1).unwrap()];
+
+    let options = PolylineHausdorffOptions {
+      max_segment_length_m: Some(200_000.0),
+      max_segment_angle_deg: None,
+      return_witness: true,
+      ..Default::default()
+    };
+
+    let result = hausdorff_polyline(&[near, far], &[anchor], options).unwrap();
+    let witness = result.witness().expect("witness requested");
+    assert_eq!(witness.source_part(), 1);
+    assert_eq!(witness.target_part(), 0);
+    assert!(witness.distance().meters() > 400_000.0);
+  }
+
+  #[test]
+  fn polyline_hausdorff_errors_when_clipped_empty() {
+    let line = vec![Point::new(0.0, 0.0).unwrap(), Point::new(0.0, 0.1).unwrap()];
+    let bbox = crate::BoundingBox::new(10.0, 20.0, 10.0, 20.0).unwrap();
+
+    let options = PolylineHausdorffOptions {
+      bounding_box: Some(bbox),
+      ..Default::default()
+    };
+
+    let parts = std::slice::from_ref(&line);
+    let result = hausdorff_polyline(parts, parts, options);
     assert!(matches!(result, Err(GeodistError::EmptyPointSet)));
   }
 }

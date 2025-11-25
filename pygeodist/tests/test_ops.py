@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import pytest
 from pytest import approx
 
 from geodist import (
     BoundingBox,
     Ellipsoid,
+    EmptyPointSetError,
     GeodesicResult,
     HausdorffDirectedWitness,
     HausdorffWitness,
     Point,
     Point3D,
+    PolylineWitness,
     geodesic_distance,
     geodesic_distance_3d,
     geodesic_distance_on_ellipsoid,
@@ -24,6 +27,7 @@ from geodist import (
     hausdorff_directed_clipped,
     hausdorff_directed_clipped_3d,
     hausdorff_polygon_boundary,
+    hausdorff_polyline,
 )
 
 
@@ -138,3 +142,51 @@ def test_polygon_boundary_hausdorff_matches_zero_for_identical() -> None:
     ]
     distance = hausdorff_polygon_boundary(exterior, exterior)
     assert distance == approx(0.0)
+
+
+def test_polyline_hausdorff_returns_witness() -> None:
+    line_a = [(0.0, 0.0), (0.0, 1.0)]
+    line_b = [(1.0, 0.0), (1.0, 1.0)]
+
+    distance_m, witness = hausdorff_polyline(
+        line_a,
+        line_b,
+        max_segment_length_m=200_000.0,
+        max_segment_angle_deg=None,
+        return_witness=True,
+    )
+
+    assert witness is not None
+    assert isinstance(witness, PolylineWitness)
+    assert witness.source_part == 0
+    assert witness.source_index == 0
+    assert witness.target_part == 0
+    assert distance_m == approx(witness.distance_m)
+
+
+def test_polyline_hausdorff_respects_multiline_parts() -> None:
+    parts = [
+        [(0.0, 0.0), (0.0, 0.1)],
+        [(3.0, 0.0), (3.0, 0.1)],
+    ]
+    anchor = [(0.0, 0.0), (0.0, 0.1)]
+
+    distance_m, witness = hausdorff_polyline(
+        parts,
+        anchor,
+        max_segment_length_m=200_000.0,
+        max_segment_angle_deg=None,
+        return_witness=True,
+    )
+
+    assert witness is not None
+    assert witness.source_part == 1
+    assert distance_m == approx(witness.distance_m)
+
+
+def test_polyline_hausdorff_clipping_empty_raises() -> None:
+    line = [(0.0, 0.0), (0.0, 0.1)]
+    bbox = BoundingBox(10.0, 20.0, 10.0, 20.0)
+
+    with pytest.raises(EmptyPointSetError):
+        hausdorff_polyline(line, line, bbox=bbox)

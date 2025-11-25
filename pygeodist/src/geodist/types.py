@@ -23,6 +23,7 @@ LineString: TypeAlias = list[Point]
 # Bounding box encoded as (min_lat, max_lat, min_lon, max_lon), degrees.
 BoundingBox: TypeAlias = tuple[Latitude, Latitude, Longitude, Longitude]
 
+
 __all__ = (
     "AltitudeM",
     "Latitude",

@@ -27,6 +27,7 @@ from .ops import (
     GeodesicResult,
     HausdorffDirectedWitness,
     HausdorffWitness,
+    PolylineWitness,
     geodesic_distance,
     geodesic_distance_3d,
     geodesic_distance_on_ellipsoid,
@@ -41,9 +42,10 @@ from .ops import (
     hausdorff_directed_clipped,
     hausdorff_directed_clipped_3d,
     hausdorff_polygon_boundary,
+    hausdorff_polyline,
 )
 
-EARTH_RADIUS_METERS: Final[float] = float(_geodist_rs.EARTH_RADIUS_METERS)
+EARTH_RADIUS_METERS: Final[float] = _geodist_rs.EARTH_RADIUS_METERS
 
 __all__ = (
     "EARTH_RADIUS_METERS",
@@ -66,6 +68,7 @@ __all__ = (
     "GeodesicResult",
     "HausdorffDirectedWitness",
     "HausdorffWitness",
+    "PolylineWitness",
     "geodesic_distance",
     "geodesic_distance_on_ellipsoid",
     "geodesic_distance_3d",
@@ -79,5 +82,6 @@ __all__ = (
     "hausdorff_directed_3d",
     "hausdorff_directed_clipped",
     "hausdorff_directed_clipped_3d",
+    "hausdorff_polyline",
     "hausdorff_polygon_boundary",
 )

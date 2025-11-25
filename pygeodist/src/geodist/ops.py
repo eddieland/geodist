@@ -4,15 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import Literal, TypeAlias, overload
 
 from . import _geodist_rs
-from .geometry import BoundingBox, Ellipsoid, Point, Point3D, Polygon
+from .errors import InvalidGeometryError
+from .geometry import BoundingBox, Ellipsoid, LineString, Point, Point3D, Polygon, _coerce_point_like
 from .types import Meters
+from .types import Point as PointTuple
 
 __all__ = (
     "GeodesicResult",
     "HausdorffDirectedWitness",
     "HausdorffWitness",
+    "PolylineWitness",
     "geodesic_distance",
     "geodesic_distance_on_ellipsoid",
     "geodesic_distance_3d",
@@ -26,6 +30,7 @@ __all__ = (
     "hausdorff_directed_clipped",
     "hausdorff_clipped_3d",
     "hausdorff_clipped",
+    "hausdorff_polyline",
     "hausdorff_polygon_boundary",
 )
 
@@ -55,6 +60,69 @@ class HausdorffWitness:
     distance_m: Meters
     a_to_b: HausdorffDirectedWitness
     b_to_a: HausdorffDirectedWitness
+
+
+@dataclass(frozen=True, slots=True)
+class PolylineWitness:
+    """Hausdorff witness for polylines including realizing coordinates."""
+
+    distance_m: Meters
+    source_part: int
+    source_index: int
+    target_part: int
+    target_index: int
+    source_coord: PointTuple
+    target_coord: PointTuple
+
+
+def _looks_like_coord(value: object) -> bool:
+    if isinstance(value, Point):
+        return True
+    if isinstance(value, tuple) and len(value) == 2:
+        lat, lon = value
+        return (
+            isinstance(lat, (int, float))
+            and not isinstance(lat, bool)
+            and isinstance(lon, (int, float))
+            and not isinstance(lon, bool)
+        )
+    return False
+
+
+PointLike: TypeAlias = Point | tuple[float, float]
+PartLike: TypeAlias = Sequence[PointLike]
+PolylineLike: TypeAlias = LineString | Sequence[PointLike | PartLike]
+
+
+def _coerce_polyline_parts(polyline: PolylineLike) -> list[list[PointTuple]]:
+    if isinstance(polyline, LineString):
+        return [polyline.to_tuple()]
+
+    try:
+        sequence = list(polyline)
+    except TypeError as exc:  # pragma: no cover - defensive branch
+        raise InvalidGeometryError(
+            f"expected LineString or coordinate sequences, got {type(polyline).__name__}"
+        ) from exc
+
+    if not sequence:
+        raise InvalidGeometryError("polyline must contain at least one part")
+
+    first = sequence[0]
+    if isinstance(first, LineString):
+        return [part.to_tuple() for part in sequence]
+
+    if _looks_like_coord(first):
+        return [[_coerce_point_like(vertex) for vertex in sequence]]  # type: ignore[arg-type]
+
+    parts: list[list[PointTuple]] = []
+    for part in sequence:
+        try:
+            parts.append([_coerce_point_like(vertex) for vertex in part])  # type: ignore[arg-type]
+        except TypeError as exc:  # pragma: no cover - defensive branch
+            raise InvalidGeometryError("expected MultiLineString-style sequence of coordinate arrays") from exc
+
+    return parts
 
 
 def geodesic_distance(origin: Point, destination: Point) -> Meters:
@@ -122,6 +190,89 @@ def geodesic_with_bearings_on_ellipsoid(
         initial_bearing_deg=float(solution.initial_bearing_deg),
         final_bearing_deg=float(solution.final_bearing_deg),
     )
+
+
+@overload
+def hausdorff_polyline(
+    polyline_a: LineString | PolylineLike,
+    polyline_b: LineString | PolylineLike,
+    *,
+    symmetric: bool = True,
+    bbox: BoundingBox | None = None,
+    max_segment_length_m: float | None = 100.0,
+    max_segment_angle_deg: float | None = 0.1,
+    sample_cap: int = 50_000,
+    return_witness: Literal[False] = False,
+) -> float: ...
+
+
+@overload
+def hausdorff_polyline(
+    polyline_a: LineString | PolylineLike,
+    polyline_b: LineString | PolylineLike,
+    *,
+    symmetric: bool = True,
+    bbox: BoundingBox | None = None,
+    max_segment_length_m: float | None = 100.0,
+    max_segment_angle_deg: float | None = 0.1,
+    sample_cap: int = 50_000,
+    return_witness: Literal[True],
+) -> tuple[float, PolylineWitness | None]: ...
+
+
+def hausdorff_polyline(
+    polyline_a: LineString | PolylineLike,
+    polyline_b: LineString | PolylineLike,
+    *,
+    symmetric: bool = True,
+    bbox: BoundingBox | None = None,
+    max_segment_length_m: float | None = 100.0,
+    max_segment_angle_deg: float | None = 0.1,
+    sample_cap: int = 50_000,
+    return_witness: bool = False,
+) -> float | tuple[float, PolylineWitness | None]:
+    """Hausdorff distance between polylines with optional witness."""
+    parts_a = _coerce_polyline_parts(polyline_a)
+    parts_b = _coerce_polyline_parts(polyline_b)
+
+    if return_witness:
+        distance_m, payload = _geodist_rs.hausdorff_polyline(
+            parts_a,
+            parts_b,
+            symmetric=bool(symmetric),
+            bbox=bbox._handle if bbox is not None else None,
+            max_segment_length_m=max_segment_length_m,
+            max_segment_angle_deg=max_segment_angle_deg,
+            sample_cap=int(sample_cap),
+            return_witness=True,
+        )
+
+        witness = (
+            PolylineWitness(
+                distance_m=float(payload.distance_m),
+                source_part=int(payload.source_part),
+                source_index=int(payload.source_index),
+                target_part=int(payload.target_part),
+                target_index=int(payload.target_index),
+                source_coord=(float(payload.source_coord[0]), float(payload.source_coord[1])),
+                target_coord=(float(payload.target_coord[0]), float(payload.target_coord[1])),
+            )
+            if payload is not None
+            else None
+        )
+        return float(distance_m), witness
+
+    result = _geodist_rs.hausdorff_polyline(
+        parts_a,
+        parts_b,
+        symmetric=bool(symmetric),
+        bbox=bbox._handle if bbox is not None else None,
+        max_segment_length_m=max_segment_length_m,
+        max_segment_angle_deg=max_segment_angle_deg,
+        sample_cap=int(sample_cap),
+        return_witness=False,
+    )
+    return float(result)
 
 
 def hausdorff_directed(a: Iterable[Point], b: Iterable[Point]) -> HausdorffDirectedWitness:
