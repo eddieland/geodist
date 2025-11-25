@@ -33,15 +33,34 @@ def test_polyline_hausdorff_smoke() -> None:
     assert directed.source_index == 1
     assert directed.target_index == 0
     assert directed.distance_m > 100_000
-    assert directed.to_tuple()[5] == (0.0, 1.0)
+    assert directed.source_coord.to_tuple() == (0.0, 1.0)
 
     symmetric = _geodist_rs.hausdorff_polyline([line_a], [line_b], options)
     assert isinstance(symmetric, _geodist_rs.PolylineHausdorffWitness)
-    distance_m, a_to_b, b_to_a = symmetric.to_tuple()
-    assert distance_m >= a_to_b[0]
-    assert distance_m >= b_to_a[0]
-    assert a_to_b[1:5] == (0, 1, 0, 0)
-    assert b_to_a[1:5] == (0, 1, 0, 0)
+    assert symmetric.distance_m >= symmetric.a_to_b.distance_m
+    assert symmetric.distance_m >= symmetric.b_to_a.distance_m
+    assert (
+        symmetric.a_to_b.source_part,
+        symmetric.a_to_b.source_index,
+        symmetric.a_to_b.target_part,
+        symmetric.a_to_b.target_index,
+    ) == (
+        0,
+        1,
+        0,
+        0,
+    )
+    assert (
+        symmetric.b_to_a.source_part,
+        symmetric.b_to_a.source_index,
+        symmetric.b_to_a.target_part,
+        symmetric.b_to_a.target_index,
+    ) == (
+        0,
+        1,
+        0,
+        0,
+    )
 
 
 def test_polyline_hausdorff_clipped_smoke() -> None:

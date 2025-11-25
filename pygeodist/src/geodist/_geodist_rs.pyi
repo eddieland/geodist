@@ -107,22 +107,10 @@ class PolylineDirectedWitness:
     source_coord: Point
     target_coord: Point
 
-    def to_tuple(
-        self,
-    ) -> tuple[float, int, int, int, int, tuple[float, float], tuple[float, float]]: ...
-
 class PolylineHausdorffWitness:
     distance_m: float
     a_to_b: PolylineDirectedWitness
     b_to_a: PolylineDirectedWitness
-
-    def to_tuple(
-        self,
-    ) -> tuple[
-        float,
-        tuple[float, int, int, int, int, tuple[float, float], tuple[float, float]],
-        tuple[float, int, int, int, int, tuple[float, float], tuple[float, float]],
-    ]: ...
 
 class BoundingBox:
     min_lat: float

@@ -149,20 +149,6 @@ impl From<hausdorff_kernel::PolylineDirectedWitness> for PolylineDirectedWitness
 
 #[pymethods]
 impl PolylineDirectedWitness {
-  /// Return a tuple `(distance_m, source_part, source_index, target_part,
-  /// target_index, source_coord, target_coord)`.
-  pub fn to_tuple(&self) -> (f64, usize, usize, usize, usize, (f64, f64), (f64, f64)) {
-    (
-      self.distance_m,
-      self.source_part,
-      self.source_index,
-      self.target_part,
-      self.target_index,
-      self.source_coord.to_tuple(),
-      self.target_coord.to_tuple(),
-    )
-  }
-
   fn __repr__(&self) -> String {
     format!(
       "PolylineDirectedWitness(distance_m={}, source_part={}, source_index={}, target_part={}, \
@@ -203,39 +189,27 @@ impl From<hausdorff_kernel::PolylineHausdorffWitness> for PolylineHausdorffWitne
 
 #[pymethods]
 impl PolylineHausdorffWitness {
-  /// Return a tuple `(distance_m, a_to_b, b_to_a)` where the latter two are
-  /// polyline witness tuples.
-  pub fn to_tuple(
-    &self,
-  ) -> (
-    f64,
-    (f64, usize, usize, usize, usize, (f64, f64), (f64, f64)),
-    (f64, usize, usize, usize, usize, (f64, f64), (f64, f64)),
-  ) {
-    (self.distance_m, self.a_to_b.to_tuple(), self.b_to_a.to_tuple())
-  }
-
   fn __repr__(&self) -> String {
-    let (dist, a_to_b, b_to_a) = self.to_tuple();
-    let format_leg = |leg: (f64, usize, usize, usize, usize, (f64, f64), (f64, f64))| {
+    let dist = self.distance_m;
+    let format_leg = |leg: &PolylineDirectedWitness| {
       format!(
         "(distance_m={}, source_part={}, source_index={}, target_part={}, target_index={}, source_coord=({}, {}), target_coord=({}, {}))",
-        leg.0,
-        leg.1,
-        leg.2,
-        leg.3,
-        leg.4,
-        (leg.5).0,
-        (leg.5).1,
-        (leg.6).0,
-        (leg.6).1
+        leg.distance_m,
+        leg.source_part,
+        leg.source_index,
+        leg.target_part,
+        leg.target_index,
+        leg.source_coord.lat,
+        leg.source_coord.lon,
+        leg.target_coord.lat,
+        leg.target_coord.lon
       )
     };
     format!(
       "PolylineHausdorffWitness(distance_m={}, a_to_b={}, b_to_a={})",
       dist,
-      format_leg(a_to_b),
-      format_leg(b_to_a)
+      format_leg(&self.a_to_b),
+      format_leg(&self.b_to_a)
     )
   }
 }
