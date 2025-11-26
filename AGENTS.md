@@ -2,9 +2,10 @@
 
 ## Project Structure & Modules
 
-- Root contains Rust crate `geodist-rs` (core kernels) and Python package `pygeodist` (bindings and tooling).
+- Root contains Rust crate `geodist-rs` (core kernels), Python package `pygeodist` (bindings and tooling for PyPI), and `experiments` workspace (notebooks, benchmarks, visualizations).
 - Rust: see `geodist-rs/src`; binary entry in `src/main.rs` for now. Cargo config in `Cargo.toml` and toolchain pin in `rust-toolchain.toml`.
-- Python: code lives in `pygeodist/src/geodist`; tests in `pygeodist/tests`; developer tooling in `pygeodist/devtools`; packaging config in `pygeodist/pyproject.toml`.
+- Python (pygeodist): code lives in `pygeodist/src/geodist`; tests in `pygeodist/tests`; packaging config in `pygeodist/pyproject.toml`. This is the published PyPI package.
+- Python (experiments): notebooks in `experiments/notebooks`; benchmarks and tools in `experiments/src/experiments`; packaging config in `experiments/pyproject.toml`. This workspace is NOT published to PyPI and can have arbitrary dependencies.
 
 ## Build, Test, and Development Commands
 

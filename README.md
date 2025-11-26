@@ -37,7 +37,8 @@ can be added later if needed; clipping still uses latitude/longitude bounds.
 | Component      | What exists today                                   | Path |
 |----------------|-----------------------------------------------------|------|
 | **geodist-rs** | Rust crate with geodesic distance + Hausdorff APIs  | `geodist-rs/` |
-| **pygeodist**  | Python package with a PyO3 extension smoke test     | `pygeodist/` |
+| **pygeodist**  | Python package with PyO3 bindings (published to PyPI) | `pygeodist/` |
+| **experiments** | Notebooks, benchmarks, and visualizations (not published) | `experiments/` |
 
 ## What works now
 
@@ -138,7 +139,12 @@ poly = vz.polygons_from_coords(
 print(vz.area_batch(poly).to_numpy())  # array([1.23087784e10])
 ```
 
-See `pygeodist/devtools/bench_vectorized.py` for a quick throughput comparison between the vectorized and scalar paths.
+See `experiments/src/experiments/bench_vectorized.py` for a quick throughput comparison between the vectorized and scalar paths:
+
+```bash
+cd experiments && uv sync --all-extras
+uv run python -m experiments.bench_vectorized --count 100000
+```
 
 ## Shapely interoperability
 
