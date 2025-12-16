@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_live:
-        description: "Upload to crates.io and PyPI (requires secrets and public repo)"
+        description: "Upload to crates.io (token required) and PyPI (trusted publishing; no token)"
         required: false
         default: false
         type: boolean
@@ -331,7 +331,7 @@ jobs:
           merge-multiple: true
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.10.0
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
           packages-dir: dist

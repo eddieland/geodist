@@ -2,7 +2,7 @@
 
 - Workflow: `.github/workflows/release.yml` triggers on tags matching `vMAJOR.MINOR.PATCH` and defaults to dry-run.
 - Gates: runs Python lint/tests (`make lint`, `make test`) and Rust fmt/clippy/tests before any packaging starts.
-- Outputs in dry-run: cargo publish dry-run builds `loxodrome-rs` and uploads the crate tarball; `maturin build` builds wheels across Linux/macos/Windows (x86_64 + macOS aarch64) for Python 3.10 and 3.12, plus an sdist from Linux.
+- Outputs in dry-run: cargo publish dry-run builds `loxodrome-rs` and uploads the crate tarball; `maturin build` builds manylinux x86_64 wheels for Python 3.10-3.13 plus an sdist from Linux (macOS/Windows runners are temporarily disabled for faster iterations).
 
 ## Cutting a dry-run release
 
@@ -15,12 +15,10 @@
 
 ## Flipping to live publish (gated)
 
-- Default stays dry-run. Live uploads require **both** the repository variable `PUBLISH_LIVE=true` and secrets seeded:
-  - `CRATES_IO_TOKEN` (crates.io API token).
-  - `PYPI_API_TOKEN` (PyPI token). Swap to PyPI Trusted Publishing later by configuring OIDC on PyPI; the workflow already grants `id-token: write`.
-- Repository must be public; the workflow aborts live publishing while private.
-- Optional manual flip: `workflow_dispatch` input `publish_live=true` can enable uploads for a single run (still requires secrets + public repo).
-- Live path: same tag trigger, artifacts still upload, and gated steps run `cargo publish --locked` plus `pypa/gh-action-pypi-publish` over the gathered wheels/sdist.
+- Default stays dry-run. Live uploads require the repository to be public and either the repository variable `PUBLISH_LIVE=true` **or** the manual `workflow_dispatch` input `publish_live=true`.
+- `CRATES_IO_TOKEN` is still required when live publishing the Rust crate. PyPI now uses Trusted Publishing (OIDC) via the `pypi` environment, so no API token is needed once the project is linked on pypi.org.
+- To push on demand: open the “Release Publishing” workflow in Actions, choose the branch/tag to run against, set `publish_live=true`, and confirm manifests are already bumped to the version you want to ship.
+- Live path: artifacts still upload, and gated steps run `cargo publish --locked` plus `pypa/gh-action-pypi-publish` over the gathered wheels/sdist.
 
 ## Quick verification / rollback notes
 
