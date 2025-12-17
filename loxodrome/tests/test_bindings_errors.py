@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from geodist import _geodist_rs as rs
+from loxodrome import _loxodrome_rs as rs
 
 
 @pytest.fixture()

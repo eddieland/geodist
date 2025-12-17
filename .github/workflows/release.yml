@@ -166,6 +166,7 @@ jobs:
 
   crate-package:
     name: Cargo publish (dry-run)
+    if: ${{ vars.PUBLISH_CRATE == 'true' }}
     runs-on: ubuntu-latest
     needs: [preflight, validation]
     env:

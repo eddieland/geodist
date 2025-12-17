@@ -187,16 +187,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
-name = "loxodrome-rs"
-version = "0.0.1"
-dependencies = [
- "criterion",
- "geographiclib-rs",
- "pyo3",
- "rstar",
-]
-
-[[package]]
 name = "geographiclib-rs"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,6 +283,16 @@ name = "libm"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
+
+[[package]]
+name = "loxodrome-rs"
+version = "0.0.1"
+dependencies = [
+ "criterion",
+ "geographiclib-rs",
+ "pyo3",
+ "rstar",
+]
 
 [[package]]
 name = "memchr"
