@@ -105,7 +105,7 @@ jobs:
 
       - name: Publish pytest report
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v6
         with:
           report_paths: loxodrome/.test-results/pytest-*.xml
           check_name: "pytest (${{ matrix.python-version }})"
